@@ -1,9 +1,9 @@
 ! $Header$
 
 #include "cctk.h"
-
+#include "derivs.F90"
 module pointwise
-!!$  use derivs
+!!$  module_use derivs
   implicit none
   private
   public calc_position
@@ -26,9 +26,6 @@ module pointwise
   public get_vectorderivs3
   public get_tensorderivs3
 contains
-#define TGR_INCLUDED
-#include "SpacetimeX/TGRtensor/src/derivs.F90"
-#undef TGR_INCLUDED
   subroutine calc_position (shape, i,j,k, pos)
     integer, intent(in)  :: shape(3)
     integer, intent(in)  :: i,j,k
