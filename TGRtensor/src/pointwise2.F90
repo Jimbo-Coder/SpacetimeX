@@ -1,9 +1,8 @@
 ! $Header$
 
 #include "cctk.h"
-#include "derivs2.F90"
 module pointwise2
-!!$  module_use derivs2
+  use derivs2
   implicit none
   private
   public calc_2position

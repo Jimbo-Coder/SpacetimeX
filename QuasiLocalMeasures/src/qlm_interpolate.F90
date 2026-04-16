@@ -26,31 +26,18 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
   
   CCTK_INT,  parameter :: izero = 0
   integer,   parameter :: ik = kind(izero)
-  integer,   parameter :: sk = kind(interpolator)
   CCTK_REAL, parameter :: one = 1
   
   CCTK_REAL, parameter :: poison_value = -42
   
-  integer      :: len_coordsystem
-  integer      :: len_interpolator
-  integer      :: len_interpolator_options
-  
-  character    :: fort_coordsystem*100
-  character    :: fort_interpolator*100
-  character    :: fort_interpolator_options*1000
-  
   integer      :: nvars
-  
-  integer      :: coord_handle
-  integer      :: interp_handle
-  integer      :: options_table
   
   integer      :: ninputs
   integer      :: noutputs
   
-  CCTK_REAL, allocatable :: xcoord(:,:)
-  CCTK_REAL, allocatable :: ycoord(:,:)
-  CCTK_REAL, allocatable :: zcoord(:,:)
+  CCTK_REAL, allocatable :: xcoord(:)
+  CCTK_REAL, allocatable :: ycoord(:)
+  CCTK_REAL, allocatable :: zcoord(:)
   
   integer      :: ind_gxx, ind_gxy, ind_gxz, ind_gyy, ind_gyz, ind_gzz
   integer      :: ind_kxx, ind_kxy, ind_kxz, ind_kyy, ind_kyz, ind_kzz
@@ -60,26 +47,20 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
   integer      :: ind_ttx, ind_tty, ind_ttz
   integer      :: ind_txx, ind_txy, ind_txz, ind_tyy, ind_tyz, ind_tzz
   
-  integer      :: coord_type
-  CCTK_POINTER :: coords(3)
   CCTK_INT     :: inputs(26)
-  CCTK_INT     :: output_types(98)
+  CCTK_INT     :: output_varinds(98)
   CCTK_POINTER :: outputs(98)
   CCTK_INT     :: operand_indices(98)
   CCTK_INT     :: operation_codes(98)
   integer      :: npoints
   
-  character    :: msg*1000
-  
   integer      :: ni, nj
-  
-  integer      :: ierr
-  
-  
   
   if (veryverbose/=0) then
      call CCTK_INFO ("Interpolating 3d grid functions")
   end if
+
+  if (hn <= 0) return
   
   
   
@@ -91,59 +72,18 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
 !!$     call CCTK_WARN (0, "The stress-energy tensor must have storage")
 !!$  end if
   
-  
-  
-  ! Get coordinate system
-  call CCTK_FortranString &
-       (len_coordsystem, int(coordsystem,sk), fort_coordsystem)
-  call CCTK_CoordSystemHandle (coord_handle, fort_coordsystem)
-  coord_handle = 0 ! TODO: CarpetX interpolator does not use this, coord systems
-  ! are not defined
+  ni = qlm_ntheta(hn)
+  nj = qlm_nphi(hn)
 
+  npoints = ni * nj
 
-  ! if (coord_handle<0) then
-  !    write (msg, '("The coordinate system """, a, """ does not exist")') &
-  !         trim(fort_coordsystem)
-  !    call CCTK_WARN (0, msg)
-  ! end if
-  
-  ! Get interpolator
-  call CCTK_FortranString &
-       (len_interpolator, int(interpolator,sk), fort_interpolator)
-  call CCTK_InterpHandle (interp_handle, fort_interpolator)
-  if (interp_handle<0) then
-     write (msg, '("The interpolator """,a,""" does not exist")') &
-          trim(fort_interpolator)
-     call CCTK_WARN (0, msg)
-  end if
-  
-  ! Get interpolator options
-  call CCTK_FortranString &
-       (len_interpolator_options, int(interpolator_options,sk), &
-       fort_interpolator_options)
-  call Util_TableCreateFromString (options_table, fort_interpolator_options)
-  if (options_table<0) then
-     write (msg, '("The interpolator_options """,a,""" have a wrong syntax")') &
-          trim(fort_interpolator_options)
-     call CCTK_WARN (0, msg)
-  end if
-  
-  
-  
-  if (hn > 0) then
-     
-     ni = qlm_ntheta(hn)
-     nj = qlm_nphi(hn)
-     
-     allocate (xcoord(ni,nj))
-     allocate (ycoord(ni,nj))
-     allocate (zcoord(ni,nj))
-     
-     xcoord(:,:) = qlm_x(:ni,:nj,hn)
-     ycoord(:,:) = qlm_y(:ni,:nj,hn)
-     zcoord(:,:) = qlm_z(:ni,:nj,hn)
-     
-  end if
+  allocate (xcoord(npoints))
+  allocate (ycoord(npoints))
+  allocate (zcoord(npoints))
+
+  call copy (xcoord, qlm_x(:ni,:nj,hn), npoints)
+  call copy (ycoord, qlm_y(:ni,:nj,hn), npoints)
+  call copy (zcoord, qlm_z(:ni,:nj,hn), npoints)
   
   
   
@@ -194,15 +134,6 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
   
   
   ! Set up the interpolator arguments
-  coord_type = CCTK_VARIABLE_REAL
-  if (hn > 0) then
-     npoints = ni * nj
-     coords(:) = (/ P(xcoord), P(ycoord), P(zcoord) /)
-  else
-     npoints = 0
-     coords(:) = CCTK_NullPointer()
-  end if
-  
   inputs = (/ &
        ind_gxx, ind_gxy, ind_gxz, ind_gyy, ind_gyz, ind_gzz, &
        ind_kxx, ind_kxy, ind_kxz, ind_kyy, ind_kyz, ind_kzz, &
@@ -260,36 +191,33 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
        0, 0, 0, &               ! T_ti
        0, 0, 0, 0, 0, 0 /)      ! T_ij
   
-  output_types(:) = CCTK_VARIABLE_REAL
-  if (hn > 0) then
-     outputs = (/ &
-          P(qlm_gxx), P(qlm_gxy), P(qlm_gxz), P(qlm_gyy), P(qlm_gyz), P(qlm_gzz), &
-          P(qlm_dgxxx), P(qlm_dgxyx), P(qlm_dgxzx), P(qlm_dgyyx), P(qlm_dgyzx), P(qlm_dgzzx), &
-          P(qlm_dgxxy), P(qlm_dgxyy), P(qlm_dgxzy), P(qlm_dgyyy), P(qlm_dgyzy), P(qlm_dgzzy), &
-          P(qlm_dgxxz), P(qlm_dgxyz), P(qlm_dgxzz), P(qlm_dgyyz), P(qlm_dgyzz), P(qlm_dgzzz), &
-          P(qlm_ddgxxxx), P(qlm_ddgxyxx), P(qlm_ddgxzxx), P(qlm_ddgyyxx), P(qlm_ddgyzxx), P(qlm_ddgzzxx), &
-          P(qlm_ddgxxxy), P(qlm_ddgxyxy), P(qlm_ddgxzxy), P(qlm_ddgyyxy), P(qlm_ddgyzxy), P(qlm_ddgzzxy), &
-          P(qlm_ddgxxxz), P(qlm_ddgxyxz), P(qlm_ddgxzxz), P(qlm_ddgyyxz), P(qlm_ddgyzxz), P(qlm_ddgzzxz), &
-          P(qlm_ddgxxyy), P(qlm_ddgxyyy), P(qlm_ddgxzyy), P(qlm_ddgyyyy), P(qlm_ddgyzyy), P(qlm_ddgzzyy), &
-          P(qlm_ddgxxyz), P(qlm_ddgxyyz), P(qlm_ddgxzyz), P(qlm_ddgyyyz), P(qlm_ddgyzyz), P(qlm_ddgzzyz), &
-          P(qlm_ddgxxzz), P(qlm_ddgxyzz), P(qlm_ddgxzzz), P(qlm_ddgyyzz), P(qlm_ddgyzzz), P(qlm_ddgzzzz), &
-          P(qlm_kxx), P(qlm_kxy), P(qlm_kxz), P(qlm_kyy), P(qlm_kyz), P(qlm_kzz), &
-          P(qlm_dkxxx), P(qlm_dkxyx), P(qlm_dkxzx), P(qlm_dkyyx), P(qlm_dkyzx), P(qlm_dkzzx), &
-          P(qlm_dkxxy), P(qlm_dkxyy), P(qlm_dkxzy), P(qlm_dkyyy), P(qlm_dkyzy), P(qlm_dkzzy), &
-          P(qlm_dkxxz), P(qlm_dkxyz), P(qlm_dkxzz), P(qlm_dkyyz), P(qlm_dkyzz), P(qlm_dkzzz), &
-          P(qlm_alpha), &
-          P(qlm_betax), P(qlm_betay), P(qlm_betaz), &
-          P(qlm_ttt), &
-          P(qlm_ttx), P(qlm_tty), P(qlm_ttz), &
-          P(qlm_txx), P(qlm_txy), P(qlm_txz), P(qlm_tyy), P(qlm_tyz), P(qlm_tzz) /)
-  else
-     outputs(:) = CCTK_NullPointer()
-  end if
+  outputs = (/ &
+       P(qlm_gxx), P(qlm_gxy), P(qlm_gxz), P(qlm_gyy), P(qlm_gyz), P(qlm_gzz), &
+       P(qlm_dgxxx), P(qlm_dgxyx), P(qlm_dgxzx), P(qlm_dgyyx), P(qlm_dgyzx), P(qlm_dgzzx), &
+       P(qlm_dgxxy), P(qlm_dgxyy), P(qlm_dgxzy), P(qlm_dgyyy), P(qlm_dgyzy), P(qlm_dgzzy), &
+       P(qlm_dgxxz), P(qlm_dgxyz), P(qlm_dgxzz), P(qlm_dgyyz), P(qlm_dgyzz), P(qlm_dgzzz), &
+       P(qlm_ddgxxxx), P(qlm_ddgxyxx), P(qlm_ddgxzxx), P(qlm_ddgyyxx), P(qlm_ddgyzxx), P(qlm_ddgzzxx), &
+       P(qlm_ddgxxxy), P(qlm_ddgxyxy), P(qlm_ddgxzxy), P(qlm_ddgyyxy), P(qlm_ddgyzxy), P(qlm_ddgzzxy), &
+       P(qlm_ddgxxxz), P(qlm_ddgxyxz), P(qlm_ddgxzxz), P(qlm_ddgyyxz), P(qlm_ddgyzxz), P(qlm_ddgzzxz), &
+       P(qlm_ddgxxyy), P(qlm_ddgxyyy), P(qlm_ddgxzyy), P(qlm_ddgyyyy), P(qlm_ddgyzyy), P(qlm_ddgzzyy), &
+       P(qlm_ddgxxyz), P(qlm_ddgxyyz), P(qlm_ddgxzyz), P(qlm_ddgyyyz), P(qlm_ddgyzyz), P(qlm_ddgzzyz), &
+       P(qlm_ddgxxzz), P(qlm_ddgxyzz), P(qlm_ddgxzzz), P(qlm_ddgyyzz), P(qlm_ddgyzzz), P(qlm_ddgzzzz), &
+       P(qlm_kxx), P(qlm_kxy), P(qlm_kxz), P(qlm_kyy), P(qlm_kyz), P(qlm_kzz), &
+       P(qlm_dkxxx), P(qlm_dkxyx), P(qlm_dkxzx), P(qlm_dkyyx), P(qlm_dkyzx), P(qlm_dkzzx), &
+       P(qlm_dkxxy), P(qlm_dkxyy), P(qlm_dkxzy), P(qlm_dkyyy), P(qlm_dkyzy), P(qlm_dkzzy), &
+       P(qlm_dkxxz), P(qlm_dkxyz), P(qlm_dkxzz), P(qlm_dkyyz), P(qlm_dkyzz), P(qlm_dkzzz), &
+       P(qlm_alpha), &
+       P(qlm_betax), P(qlm_betay), P(qlm_betaz), &
+       P(qlm_ttt), &
+       P(qlm_ttx), P(qlm_tty), P(qlm_ttz), &
+       P(qlm_txx), P(qlm_txy), P(qlm_txz), P(qlm_tyy), P(qlm_tyz), P(qlm_tzz) /)
   
   
   
   ninputs = size(inputs)
   noutputs = size(outputs)
+
+  output_varinds(:) = inputs(operand_indices(:) + 1)
   
   
   
@@ -397,30 +325,9 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
   
   
   
-  ! Call the interpolator
-  call Util_TableSetIntArray &
-       (ierr, options_table, noutputs, &
-       operand_indices, "operand_indices")
-  if (ierr /= 0) call CCTK_WARN (0, "internal error")
-  call Util_TableSetIntArray &
-       (ierr, options_table, noutputs, &
-       operation_codes, "operation_codes")
-  if (ierr /= 0) call CCTK_WARN (0, "internal error")
-  
-  call CCTK_InterpGridArrays &
-       (ierr, cctkGH, 3, &
-       interp_handle, options_table, coord_handle, &
-       npoints, coord_type, coords, &
-       ninputs, inputs, &
-       noutputs, output_types, outputs)
-  
-  if (ierr /= 0) then
-     if (hn > 0) then
-        qlm_calc_error(hn) = 1
-     end if
-     call CCTK_WARN (1, "Interpolator failed")
-     return
-  end if
+  ! Call CarpetX's direct interpolation interface
+  call Interpolate(cctkGH, npoints, xcoord, ycoord, zcoord, noutputs, &
+       output_varinds, operation_codes, 1, CCTK_PointerTo(outputs))
   
   
   
@@ -645,23 +552,11 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
 #endif
      
   end if
+  qlm_have_valid_data(hn) = 1
   
-  
-  
-  ! Free interpolator options
-  call Util_TableDestroy (ierr, options_table)
-  
-  
-  
-  if (hn > 0) then
-     
-     qlm_have_valid_data(hn) = 1
-     
-     deallocate (xcoord)
-     deallocate (ycoord)
-     deallocate (zcoord)
-     
-  end if
+  deallocate (xcoord)
+  deallocate (ycoord)
+  deallocate (zcoord)
   
   
   

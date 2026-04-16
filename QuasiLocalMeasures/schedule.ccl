@@ -27,22 +27,33 @@ SCHEDULE qlm_init AT initial
 {
   OPTIONS: global
   LANG: Fortran
+  WRITES: qlm_state(everywhere)
 } "Initialise quasi-local calculations"
 
 SCHEDULE qlm_calculate AT analysis AFTER (SphericalSurface_HasBeenSet TmunuBaseX_SetTmunuVars)
 {
   OPTIONS: global
   LANG: Fortran
-  STORAGE: qlm_coordinates qlm_coordinates_p
-  STORAGE: qlm_newman_penrose qlm_weyl_scalars
-  STORAGE: qlm_ricci_scalars qlm_twometric qlm_killed_twometric 
-  STORAGE: qlm_invariant_coordinates qlm_multipole_moments qlm_3determinant
-  # TRIGGERS: qlm_state
-  # TRIGGERS: qlm_grid_int qlm_grid_real
-  # TRIGGERS: qlm_shapes qlm_tetrad_l qlm_tetrad_n qlm_tetrad_m
-  # TRIGGERS: qlm_coordinates
-  # TRIGGERS: qlm_newman_penrose qlm_weyl_scalars
-  # TRIGGERS: qlm_ricci_scalars qlm_twometric qlm_killing_vector qlm_killed_twometric
-  # TRIGGERS: qlm_invariant_coordinates qlm_multipole_moments qlm_3determinant
-  # TRIGGERS: qlm_scalars
+  # Note: groups whose names end in "_p" cannot appear in READS/WRITES.
+  # The flesh parser interprets trailing "_p" as a timelevel suffix.
+  READS: SphericalSurface::sf_valid(everywhere)
+  READS: SphericalSurface::sf_radius(everywhere)
+  READS: SphericalSurface::sf_origin(everywhere)
+  READS: SphericalSurface::sf_coordinate_descriptors(everywhere)
+  READS: ADMBaseX::metric(everywhere)
+  READS: ADMBaseX::curv(everywhere)
+  READS: ADMBaseX::lapse(everywhere)
+  READS: ADMBaseX::shift(everywhere)
+  READS: TmunuBaseX::eTtt(everywhere)
+  READS: TmunuBaseX::eTti(everywhere)
+  READS: TmunuBaseX::eTij(everywhere)
+  WRITES: qlm_state(everywhere)
+  WRITES: qlm_grid_int(everywhere) qlm_grid_real(everywhere)
+  WRITES: qlm_shapes(everywhere)
+  WRITES: qlm_coordinates(everywhere)
+  WRITES: qlm_tetrad_l(everywhere) qlm_tetrad_n(everywhere) qlm_tetrad_m(everywhere)
+  WRITES: qlm_newman_penrose(everywhere) qlm_weyl_scalars(everywhere)
+  WRITES: qlm_ricci_scalars(everywhere) qlm_twometric(everywhere) qlm_killing_vector(everywhere)
+  WRITES: qlm_3determinant(everywhere)
+  WRITES: qlm_scalars(everywhere)
 } "Calculate quasi-local quantities"
