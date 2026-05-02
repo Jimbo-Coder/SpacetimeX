@@ -32,17 +32,19 @@ STRING surface_name[100] "Spherical surface that contains the surface shape"
 STRING coordsystem "The coordinate system to use" STEERABLE=always
 {
   "" :: "must be a registered coordinate system"
-} "cart3d"
+} ""
+# Ignored for interpolator = "CarpetX".
 
 STRING interpolator "The interpolator to use" STEERABLE=always
 {
   "" :: "must be a registered interpolator"
-} "Lagrange polynomial interpolation"
+} "CarpetX"
 
 STRING interpolator_options "Options for the interpolator" STEERABLE=always
 {
   "" :: "must be a valid options specification"
-} "order=2"
+} "order=1"
+# For interpolator = "CarpetX", this must match CarpetX::interpolation_order.
 
 
 

@@ -23,22 +23,35 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
   DECLARE_CCTK_FUNCTIONS
   DECLARE_CCTK_PARAMETERS
   integer :: hn
-  
+
   CCTK_INT,  parameter :: izero = 0
   integer,   parameter :: ik = kind(izero)
+  integer,   parameter :: sk = kind(interpolator)
   CCTK_REAL, parameter :: one = 1
-  
+
   CCTK_REAL, parameter :: poison_value = -42
-  
+
+  integer      :: len_coordsystem
+  integer      :: len_interpolator
+  integer      :: len_interpolator_options
+
+  character    :: fort_coordsystem*100
+  character    :: fort_interpolator*100
+  character    :: fort_interpolator_options*1000
+
   integer      :: nvars
-  
+
+  integer      :: coord_handle
+  integer      :: interp_handle
+  integer      :: options_table
+
   integer      :: ninputs
   integer      :: noutputs
-  
-  CCTK_REAL, allocatable :: xcoord(:)
-  CCTK_REAL, allocatable :: ycoord(:)
-  CCTK_REAL, allocatable :: zcoord(:)
-  
+
+  CCTK_REAL, allocatable :: xcoord(:,:)
+  CCTK_REAL, allocatable :: ycoord(:,:)
+  CCTK_REAL, allocatable :: zcoord(:,:)
+
   integer      :: ind_gxx, ind_gxy, ind_gxz, ind_gyy, ind_gyz, ind_gzz
   integer      :: ind_kxx, ind_kxy, ind_kxz, ind_kyy, ind_kyz, ind_kzz
   integer      :: ind_alpha
@@ -46,49 +59,78 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
   integer      :: ind_ttt
   integer      :: ind_ttx, ind_tty, ind_ttz
   integer      :: ind_txx, ind_txy, ind_txz, ind_tyy, ind_tyz, ind_tzz
-  
+
+  integer      :: coord_type
+  CCTK_POINTER :: coords(3)
   CCTK_INT     :: inputs(26)
-  CCTK_INT     :: output_varinds(98)
+  CCTK_INT     :: output_types(98)
   CCTK_POINTER :: outputs(98)
   CCTK_INT     :: operand_indices(98)
   CCTK_INT     :: operation_codes(98)
   integer      :: npoints
-  
+
+  character    :: msg*1000
+
   integer      :: ni, nj
-  
+
+  integer      :: ierr
+
   if (veryverbose/=0) then
      call CCTK_INFO ("Interpolating 3d grid functions")
   end if
 
-  if (hn <= 0) return
-  
-  
-  
-  !! if (shift_state==0) then
-  !!    call CCTK_WARN (0, "The shift must have storage")
-  !! end if
-  
-!!$  if (stress_energy_state==0) then
-!!$     call CCTK_WARN (0, "The stress-energy tensor must have storage")
-!!$  end if
-  
-  ni = qlm_ntheta(hn)
-  nj = qlm_nphi(hn)
+  if (CCTK_EQUALS(interpolator, "CarpetX")) then
+     coord_handle = 0
+  else
+     call CCTK_FortranString &
+          (len_coordsystem, int(coordsystem,sk), fort_coordsystem)
+     call CCTK_CoordSystemHandle (coord_handle, fort_coordsystem)
+     if (coord_handle<0) then
+        write (msg, '("The coordinate system """, a, """ does not exist")') &
+             trim(fort_coordsystem)
+        call CCTK_WARN (0, msg)
+     end if
+  end if
 
-  npoints = ni * nj
+  ! Get interpolator
+  call CCTK_FortranString &
+       (len_interpolator, int(interpolator,sk), fort_interpolator)
+  call CCTK_InterpHandle (interp_handle, fort_interpolator)
+  if (interp_handle<0) then
+     write (msg, '("The interpolator """,a,""" does not exist")') &
+          trim(fort_interpolator)
+     call CCTK_WARN (0, msg)
+  end if
 
-  allocate (xcoord(npoints))
-  allocate (ycoord(npoints))
-  allocate (zcoord(npoints))
+  call CCTK_FortranString &
+       (len_interpolator_options, int(interpolator_options,sk), &
+       fort_interpolator_options)
+  call Util_TableCreateFromString (options_table, fort_interpolator_options)
+  if (options_table<0) then
+     write (msg, '("The interpolator_options """,a,""" have a wrong syntax")') &
+          trim(fort_interpolator_options)
+     call CCTK_WARN (0, msg)
+  end if
 
-  call copy (xcoord, qlm_x(:ni,:nj,hn), npoints)
-  call copy (ycoord, qlm_y(:ni,:nj,hn), npoints)
-  call copy (zcoord, qlm_z(:ni,:nj,hn), npoints)
-  
-  
-  
+  if (hn > 0) then
+
+     ni = qlm_ntheta(hn)
+     nj = qlm_nphi(hn)
+
+     allocate (xcoord(ni,nj))
+     allocate (ycoord(ni,nj))
+     allocate (zcoord(ni,nj))
+
+     xcoord(:,:) = qlm_x(:ni,:nj,hn)
+     ycoord(:,:) = qlm_y(:ni,:nj,hn)
+     zcoord(:,:) = qlm_z(:ni,:nj,hn)
+
+  end if
+
+
+
   ! TODO: check the excision mask
-  
+
   ! Get variable indices
   call CCTK_VarIndex (ind_gxx  , "ADMBaseX::gxx"   )
   call CCTK_VarIndex (ind_gxy  , "ADMBaseX::gxy"   )
@@ -106,34 +148,29 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
   call CCTK_VarIndex (ind_betax, "ADMBaseX::betax" )
   call CCTK_VarIndex (ind_betay, "ADMBaseX::betay" )
   call CCTK_VarIndex (ind_betaz, "ADMBaseX::betaz" )
-  !! if (stress_energy_state /= 0) then
-  if (1 == 1) then
-     call CCTK_VarIndex (ind_ttt  , "TmunuBaseX::eTtt")
-     call CCTK_VarIndex (ind_ttx  , "TmunuBaseX::eTtx")
-     call CCTK_VarIndex (ind_tty  , "TmunuBaseX::eTty")
-     call CCTK_VarIndex (ind_ttz  , "TmunuBaseX::eTtz")
-     call CCTK_VarIndex (ind_txx  , "TmunuBaseX::eTxx")
-     call CCTK_VarIndex (ind_txy  , "TmunuBaseX::eTxy")
-     call CCTK_VarIndex (ind_txz  , "TmunuBaseX::eTxz")
-     call CCTK_VarIndex (ind_tyy  , "TmunuBaseX::eTyy")
-     call CCTK_VarIndex (ind_tyz  , "TmunuBaseX::eTyz")
-     call CCTK_VarIndex (ind_tzz  , "TmunuBaseX::eTzz")
-  else
-     ind_ttt = -1
-     ind_ttx = -1
-     ind_tty = -1
-     ind_ttz = -1
-     ind_txx = -1
-     ind_txy = -1
-     ind_txz = -1
-     ind_tyy = -1
-     ind_tyz = -1
-     ind_tzz = -1
-  end if
-  
-  
-  
+  call CCTK_VarIndex (ind_ttt  , "TmunuBaseX::eTtt")
+  call CCTK_VarIndex (ind_ttx  , "TmunuBaseX::eTtx")
+  call CCTK_VarIndex (ind_tty  , "TmunuBaseX::eTty")
+  call CCTK_VarIndex (ind_ttz  , "TmunuBaseX::eTtz")
+  call CCTK_VarIndex (ind_txx  , "TmunuBaseX::eTxx")
+  call CCTK_VarIndex (ind_txy  , "TmunuBaseX::eTxy")
+  call CCTK_VarIndex (ind_txz  , "TmunuBaseX::eTxz")
+  call CCTK_VarIndex (ind_tyy  , "TmunuBaseX::eTyy")
+  call CCTK_VarIndex (ind_tyz  , "TmunuBaseX::eTyz")
+  call CCTK_VarIndex (ind_tzz  , "TmunuBaseX::eTzz")
+
+
+
   ! Set up the interpolator arguments
+  coord_type = CCTK_VARIABLE_REAL
+  if (hn > 0) then
+     npoints = ni * nj
+     coords(:) = (/ P(xcoord), P(ycoord), P(zcoord) /)
+  else
+     npoints = 0
+     coords(:) = CCTK_NullPointer()
+  end if
+
   inputs = (/ &
        ind_gxx, ind_gxy, ind_gxz, ind_gyy, ind_gyz, ind_gzz, &
        ind_kxx, ind_kxy, ind_kxz, ind_kyy, ind_kyz, ind_kzz, &
@@ -142,13 +179,13 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
        ind_ttt, &
        ind_ttx, ind_tty, ind_ttz, &
        ind_txx, ind_txy, ind_txz, ind_tyy, ind_tyz, ind_tzz /)
-  
+
   call CCTK_NumVars (nvars)
   if (nvars < 0) call CCTK_WARN (0, "internal error")
   if (any(inputs /= -1 .and. (inputs < 0 .or. inputs >= nvars))) then
      call CCTK_WARN (0, "internal error")
   end if
-  
+
   operand_indices = (/ &
        00, 01, 02, 03, 04, 05, & ! g_ij
        00, 01, 02, 03, 04, 05, & ! g_ij,k
@@ -169,7 +206,7 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
        16, &                    ! T_tt
        17, 18, 19, &            ! T_ti
        20, 21, 22, 23, 24, 25 /) ! T_ij
-  
+
   operation_codes = (/ &
        0, 0, 0, 0, 0, 0, &      ! g_ij
        1, 1, 1, 1, 1, 1, &      ! g_ij,k
@@ -190,37 +227,40 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
        0, &                     ! T_tt
        0, 0, 0, &               ! T_ti
        0, 0, 0, 0, 0, 0 /)      ! T_ij
-  
-  outputs = (/ &
-       P(qlm_gxx), P(qlm_gxy), P(qlm_gxz), P(qlm_gyy), P(qlm_gyz), P(qlm_gzz), &
-       P(qlm_dgxxx), P(qlm_dgxyx), P(qlm_dgxzx), P(qlm_dgyyx), P(qlm_dgyzx), P(qlm_dgzzx), &
-       P(qlm_dgxxy), P(qlm_dgxyy), P(qlm_dgxzy), P(qlm_dgyyy), P(qlm_dgyzy), P(qlm_dgzzy), &
-       P(qlm_dgxxz), P(qlm_dgxyz), P(qlm_dgxzz), P(qlm_dgyyz), P(qlm_dgyzz), P(qlm_dgzzz), &
-       P(qlm_ddgxxxx), P(qlm_ddgxyxx), P(qlm_ddgxzxx), P(qlm_ddgyyxx), P(qlm_ddgyzxx), P(qlm_ddgzzxx), &
-       P(qlm_ddgxxxy), P(qlm_ddgxyxy), P(qlm_ddgxzxy), P(qlm_ddgyyxy), P(qlm_ddgyzxy), P(qlm_ddgzzxy), &
-       P(qlm_ddgxxxz), P(qlm_ddgxyxz), P(qlm_ddgxzxz), P(qlm_ddgyyxz), P(qlm_ddgyzxz), P(qlm_ddgzzxz), &
-       P(qlm_ddgxxyy), P(qlm_ddgxyyy), P(qlm_ddgxzyy), P(qlm_ddgyyyy), P(qlm_ddgyzyy), P(qlm_ddgzzyy), &
-       P(qlm_ddgxxyz), P(qlm_ddgxyyz), P(qlm_ddgxzyz), P(qlm_ddgyyyz), P(qlm_ddgyzyz), P(qlm_ddgzzyz), &
-       P(qlm_ddgxxzz), P(qlm_ddgxyzz), P(qlm_ddgxzzz), P(qlm_ddgyyzz), P(qlm_ddgyzzz), P(qlm_ddgzzzz), &
-       P(qlm_kxx), P(qlm_kxy), P(qlm_kxz), P(qlm_kyy), P(qlm_kyz), P(qlm_kzz), &
-       P(qlm_dkxxx), P(qlm_dkxyx), P(qlm_dkxzx), P(qlm_dkyyx), P(qlm_dkyzx), P(qlm_dkzzx), &
-       P(qlm_dkxxy), P(qlm_dkxyy), P(qlm_dkxzy), P(qlm_dkyyy), P(qlm_dkyzy), P(qlm_dkzzy), &
-       P(qlm_dkxxz), P(qlm_dkxyz), P(qlm_dkxzz), P(qlm_dkyyz), P(qlm_dkyzz), P(qlm_dkzzz), &
-       P(qlm_alpha), &
-       P(qlm_betax), P(qlm_betay), P(qlm_betaz), &
-       P(qlm_ttt), &
-       P(qlm_ttx), P(qlm_tty), P(qlm_ttz), &
-       P(qlm_txx), P(qlm_txy), P(qlm_txz), P(qlm_tyy), P(qlm_tyz), P(qlm_tzz) /)
-  
-  
-  
+
+  output_types(:) = CCTK_VARIABLE_REAL
+  if (hn > 0) then
+     outputs = (/ &
+          P(qlm_gxx), P(qlm_gxy), P(qlm_gxz), P(qlm_gyy), P(qlm_gyz), P(qlm_gzz), &
+          P(qlm_dgxxx), P(qlm_dgxyx), P(qlm_dgxzx), P(qlm_dgyyx), P(qlm_dgyzx), P(qlm_dgzzx), &
+          P(qlm_dgxxy), P(qlm_dgxyy), P(qlm_dgxzy), P(qlm_dgyyy), P(qlm_dgyzy), P(qlm_dgzzy), &
+          P(qlm_dgxxz), P(qlm_dgxyz), P(qlm_dgxzz), P(qlm_dgyyz), P(qlm_dgyzz), P(qlm_dgzzz), &
+          P(qlm_ddgxxxx), P(qlm_ddgxyxx), P(qlm_ddgxzxx), P(qlm_ddgyyxx), P(qlm_ddgyzxx), P(qlm_ddgzzxx), &
+          P(qlm_ddgxxxy), P(qlm_ddgxyxy), P(qlm_ddgxzxy), P(qlm_ddgyyxy), P(qlm_ddgyzxy), P(qlm_ddgzzxy), &
+          P(qlm_ddgxxxz), P(qlm_ddgxyxz), P(qlm_ddgxzxz), P(qlm_ddgyyxz), P(qlm_ddgyzxz), P(qlm_ddgzzxz), &
+          P(qlm_ddgxxyy), P(qlm_ddgxyyy), P(qlm_ddgxzyy), P(qlm_ddgyyyy), P(qlm_ddgyzyy), P(qlm_ddgzzyy), &
+          P(qlm_ddgxxyz), P(qlm_ddgxyyz), P(qlm_ddgxzyz), P(qlm_ddgyyyz), P(qlm_ddgyzyz), P(qlm_ddgzzyz), &
+          P(qlm_ddgxxzz), P(qlm_ddgxyzz), P(qlm_ddgxzzz), P(qlm_ddgyyzz), P(qlm_ddgyzzz), P(qlm_ddgzzzz), &
+          P(qlm_kxx), P(qlm_kxy), P(qlm_kxz), P(qlm_kyy), P(qlm_kyz), P(qlm_kzz), &
+          P(qlm_dkxxx), P(qlm_dkxyx), P(qlm_dkxzx), P(qlm_dkyyx), P(qlm_dkyzx), P(qlm_dkzzx), &
+          P(qlm_dkxxy), P(qlm_dkxyy), P(qlm_dkxzy), P(qlm_dkyyy), P(qlm_dkyzy), P(qlm_dkzzy), &
+          P(qlm_dkxxz), P(qlm_dkxyz), P(qlm_dkxzz), P(qlm_dkyyz), P(qlm_dkyzz), P(qlm_dkzzz), &
+          P(qlm_alpha), &
+          P(qlm_betax), P(qlm_betay), P(qlm_betaz), &
+          P(qlm_ttt), &
+          P(qlm_ttx), P(qlm_tty), P(qlm_ttz), &
+          P(qlm_txx), P(qlm_txy), P(qlm_txz), P(qlm_tyy), P(qlm_tyz), P(qlm_tzz) /)
+  else
+     outputs(:) = CCTK_NullPointer()
+  end if
+
+
+
   ninputs = size(inputs)
   noutputs = size(outputs)
 
-  output_varinds(:) = inputs(operand_indices(:) + 1)
-  
-  
-  
+
+
 #if 0
   ! Poison the output variables
   call poison (qlm_gxx    )
@@ -322,18 +362,43 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
   call poison (qlm_tyz    )
   call poison (qlm_tzz    )
 #endif
-  
-  
-  
-  ! Call CarpetX's direct interpolation interface
-  call Interpolate(cctkGH, npoints, xcoord, ycoord, zcoord, noutputs, &
-       output_varinds, operation_codes, 1, CCTK_PointerTo(outputs))
-  
-  
-  
+
+
+
+  ! Call the interpolator
+  call Util_TableSetIntArray &
+       (ierr, options_table, noutputs, &
+       operand_indices, "operand_indices")
+  if (ierr /= 0) call CCTK_WARN (0, "internal error")
+  call Util_TableSetIntArray &
+       (ierr, options_table, noutputs, &
+       operation_codes, "operation_codes")
+  if (ierr /= 0) call CCTK_WARN (0, "internal error")
+
+  call CCTK_InterpGridArrays &
+       (ierr, cctkGH, 3, &
+       interp_handle, options_table, coord_handle, &
+       npoints, coord_type, coords, &
+       ninputs, inputs, &
+       noutputs, output_types, outputs)
+
+  if (ierr /= 0) then
+     if (hn > 0) then
+        qlm_calc_error(hn) = 1
+        deallocate (xcoord)
+        deallocate (ycoord)
+        deallocate (zcoord)
+     end if
+     call Util_TableDestroy (ierr, options_table)
+     call CCTK_WARN (1, "Interpolator failed")
+     return
+  end if
+
+
+
   ! Unpack the variables
   if (hn > 0) then
-     
+
      call unpack (qlm_gxx    , ni, nj)
      call unpack (qlm_gxy    , ni, nj)
      call unpack (qlm_gxz    , ni, nj)
@@ -422,33 +487,19 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
      call unpack (qlm_betax  , ni, nj)
      call unpack (qlm_betay  , ni, nj)
      call unpack (qlm_betaz  , ni, nj)
-     !! if (stress_energy_state /= 0) then
-     if (1 == 1) then
-        call unpack (qlm_ttt    , ni, nj)
-        call unpack (qlm_ttx    , ni, nj)
-        call unpack (qlm_tty    , ni, nj)
-        call unpack (qlm_ttz    , ni, nj)
-        call unpack (qlm_txx    , ni, nj)
-        call unpack (qlm_txy    , ni, nj)
-        call unpack (qlm_txz    , ni, nj)
-        call unpack (qlm_tyy    , ni, nj)
-        call unpack (qlm_tyz    , ni, nj)
-        call unpack (qlm_tzz    , ni, nj)
-     else
-        qlm_ttt = 0
-        qlm_ttx = 0
-        qlm_tty = 0
-        qlm_ttz = 0
-        qlm_txx = 0
-        qlm_txy = 0
-        qlm_txz = 0
-        qlm_tyy = 0
-        qlm_tyz = 0
-        qlm_tzz = 0
-     end if
-     
-     
-     
+     call unpack (qlm_ttt    , ni, nj)
+     call unpack (qlm_ttx    , ni, nj)
+     call unpack (qlm_tty    , ni, nj)
+     call unpack (qlm_ttz    , ni, nj)
+     call unpack (qlm_txx    , ni, nj)
+     call unpack (qlm_txy    , ni, nj)
+     call unpack (qlm_txz    , ni, nj)
+     call unpack (qlm_tyy    , ni, nj)
+     call unpack (qlm_tyz    , ni, nj)
+     call unpack (qlm_tzz    , ni, nj)
+
+
+
 #if 0
      ! Check for poison
      call poison_check (qlm_gxx    , "qlm_gxx    ")
@@ -550,18 +601,26 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn)
      call poison_check (qlm_tyz    , "qlm_tyz    ")
      call poison_check (qlm_tzz    , "qlm_tzz    ")
 #endif
-     
+
   end if
-  qlm_have_valid_data(hn) = 1
-  
-  deallocate (xcoord)
-  deallocate (ycoord)
-  deallocate (zcoord)
-  
-  
-  
+
+  ! Free interpolator options
+  call Util_TableDestroy (ierr, options_table)
+
+  if (hn > 0) then
+
+     qlm_have_valid_data(hn) = 1
+
+     deallocate (xcoord)
+     deallocate (ycoord)
+     deallocate (zcoord)
+
+  end if
+
+
+
 contains
-  
+
   subroutine pack (arr, ni, nj)
     integer,   intent(in)    :: ni, nj
     CCTK_REAL, intent(inout) :: arr(:,:)
@@ -569,7 +628,7 @@ contains
     tmp(:,:) = arr(:ni, :nj)
     call copy (arr, tmp, size(tmp))
   end subroutine pack
-  
+
   subroutine unpack (arr, ni, nj)
     integer,   intent(in)    :: ni, nj
     CCTK_REAL, intent(inout) :: arr(:,:)
@@ -579,19 +638,19 @@ contains
     arr(ni+1:, :nj) = 0
     arr(:, nj+1:) = 0
   end subroutine unpack
-  
+
   subroutine copy (a, b, n)
     integer,   intent(in)  :: n
     CCTK_REAL, intent(out) :: a(n)
     CCTK_REAL, intent(in)  :: b(n)
     a = b
   end subroutine copy
-  
+
   subroutine poison (arr)
     CCTK_REAL, intent(out) :: arr(:,:)
     arr = poison_value
   end subroutine poison
-  
+
   subroutine poison_check (arr, name)
     CCTK_REAL,    intent(in) :: arr(:,:)
     character(*), intent(in) :: name
@@ -607,5 +666,5 @@ contains
 !!$       end do
     end if
   end subroutine poison_check
-  
+
 end subroutine qlm_interpolate
