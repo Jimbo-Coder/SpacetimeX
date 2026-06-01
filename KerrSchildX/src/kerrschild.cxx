@@ -144,8 +144,6 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
   DECLARE_CCTK_ARGUMENTSX_KerrSchildX_InitialData;
   DECLARE_CCTK_PARAMETERS;
 
-  CCTK_INFO("DEBUG_MARKER KerrSchildX_InitialData enter");
-
   using Arith::pow2, Arith::pown;
   using std::sqrt;
 
@@ -368,7 +366,5 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
           dtbetaz_(p.I) = dtbetaz;
         }
       });
-
-  CCTK_INFO("DEBUG_MARKER KerrSchildX_InitialData exit");
 }
 } // namespace KerrSchild
