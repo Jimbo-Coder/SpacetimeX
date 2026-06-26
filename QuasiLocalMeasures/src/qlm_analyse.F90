@@ -358,7 +358,7 @@ subroutine qlm_analyse (CCTK_ARGUMENTS, hn)
              &        + gu(a,c) * kk(c,b) * ss(b) 
               end do
               adm_mom(a) = adm_mom(a) &
-                   + delta3(a,b) * trk * ss(b) 
+                   - delta3(a,b) * trk * ss(b)
            end do
         end do
         qlm_adm_momentum_x(hn) = qlm_adm_momentum_x(hn) &

@@ -27,6 +27,7 @@ subroutine qlm_init (CCTK_ARGUMENTS)
      qlm_have_killing_vector(hn) = 0
      qlm_have_killing_vector_p(hn) = 0
      qlm_have_killing_vector_p_p(hn) = 0
+     qlm_timederiv_order(hn) = 0
      qlm_iteration(hn) = -1
      
   end do

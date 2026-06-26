@@ -35,6 +35,42 @@ void SphericalSurface_Set (CCTK_ARGUMENTS)
   
   
   for (n=0; n<nsurfaces; ++n) {
+
+    sf_active[n] = 0;
+    sf_valid[n] = 0;
+
+    for (j=0; j<maxnphi; ++j) {
+      for (i=0; i<maxntheta; ++i) {
+        int const ind = i + maxntheta * (j + maxnphi * n);
+        sf_radius[ind] = 0.0;
+      }
+    }
+
+    if (!set_spherical[n] && !set_elliptic[n]) {
+      sf_area[n] = 0.0;
+      sf_mean_radius[n] = 0.0;
+      sf_centroid_x[n] = 0.0;
+      sf_centroid_y[n] = 0.0;
+      sf_centroid_z[n] = 0.0;
+      sf_quadrupole_xx[n] = 0.0;
+      sf_quadrupole_xy[n] = 0.0;
+      sf_quadrupole_xz[n] = 0.0;
+      sf_quadrupole_yy[n] = 0.0;
+      sf_quadrupole_yz[n] = 0.0;
+      sf_quadrupole_zz[n] = 0.0;
+      sf_min_radius[n] = 0.0;
+      sf_max_radius[n] = 0.0;
+      sf_min_x[n] = 0.0;
+      sf_min_y[n] = 0.0;
+      sf_min_z[n] = 0.0;
+      sf_max_x[n] = 0.0;
+      sf_max_y[n] = 0.0;
+      sf_max_z[n] = 0.0;
+      sf_origin_x[n] = 0.0;
+      sf_origin_y[n] = 0.0;
+      sf_origin_z[n] = 0.0;
+      continue;
+    }
     
     if (set_spherical[n]) {
       

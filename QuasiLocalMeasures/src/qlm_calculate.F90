@@ -88,6 +88,8 @@ subroutine qlm_calculate (CCTK_ARGUMENTS)
         call qlm_calc_newman_penrose (CCTK_PASS_FTOF, hn)
         call qlm_calc_weyl_scalars (CCTK_PASS_FTOF, hn)
         call qlm_calc_twometric (CCTK_PASS_FTOF, hn)
+        qlm_killing_eigenvalue_re(hn) = -1
+        qlm_killing_eigenvalue_im(hn) = 0
         if (CCTK_EQUALS(killing_vector_method, "axial")) then
            call qlm_killing_axial (CCTK_PASS_FTOF, hn)
         else if (CCTK_EQUALS(killing_vector_method, "eigenvector")) then
