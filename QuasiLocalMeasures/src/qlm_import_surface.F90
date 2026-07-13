@@ -85,7 +85,7 @@ subroutine qlm_import_surface (CCTK_ARGUMENTS, hn)
   qlm_have_valid_data(hn) = 0
   qlm_have_killing_vector(hn) = 1
   qlm_iteration(hn) = cctk_iteration
-
+  
   if (qlm_have_valid_data_p(hn) == 0) then
      qlm_timederiv_order(hn) = 0
   else if (qlm_have_valid_data_p_p(hn) == 0) then

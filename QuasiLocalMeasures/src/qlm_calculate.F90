@@ -14,6 +14,7 @@ subroutine qlm_calculate (CCTK_ARGUMENTS)
   DECLARE_CCTK_PARAMETERS
   
   integer   :: num_procs, my_proc
+  integer   :: num_qlm_procs
   integer   :: pass
   integer   :: h0, hn
   
@@ -28,15 +29,21 @@ subroutine qlm_calculate (CCTK_ARGUMENTS)
   
   num_procs = CCTK_nProcs (cctkGH)
   my_proc   = CCTK_MyProc (cctkGH)
-  do pass = 1, (num_surfaces + num_procs - 1) / num_procs
+  num_qlm_procs = num_procs
+  if (CCTK_EQUALS(interpolator, "CarpetX")) then
+     ! CarpetX cannot accept points from ranks without a local level-0 box.
+     num_qlm_procs = 1
+  end if
+  do pass = 1, (num_surfaces + num_qlm_procs - 1) / num_qlm_procs
      
      ! Calculate the range of horizons for this pass
-     h0 = (pass - 1) * num_procs + 1
+     h0 = (pass - 1) * num_qlm_procs + 1
      
      ! This processor's horizon
      hn = h0 + my_proc
      
      ! If there is nothing to do for this processor, set hn to zero
+     if (my_proc >= num_qlm_procs) hn = 0
      if (hn > num_surfaces) hn = 0
     
      ! start calculations already? 
