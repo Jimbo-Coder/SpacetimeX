@@ -45,3 +45,9 @@ CCTK_REAL epsilon "Avoid division by zero"
 {
   0:* :: ""
 } 1.0e-8
+
+CCTK_KEYWORD metric_y_dependence "How the analytic Kerr-Schild metric depends on y"
+{
+  "full3d" :: "Use the full 3D Kerr-Schild metric"
+  "xz"     :: "Evaluate an x-z slab metric at y=0 with no y dependence"
+} "full3d"

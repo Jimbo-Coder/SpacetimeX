@@ -152,6 +152,7 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
   const bool write_shift = CCTK_Equals(initial_shift, "kerrschildx");
   const bool write_dtlapse = CCTK_Equals(initial_dtlapse, "kerrschildx");
   const bool write_dtshift = CCTK_Equals(initial_dtshift, "kerrschildx");
+  const bool use_xz_metric = CCTK_Equals(metric_y_dependence, "xz");
 
   assert(write_metric || write_lapse || write_shift || write_dtlapse ||
          write_dtshift);
@@ -187,6 +188,8 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
         auto x = vcoordx(p.I);
         auto y = vcoordy(p.I);
         auto z = vcoordz(p.I);
+        const auto metric_y = use_xz_metric ? CCTK_REAL(0.0) : y;
+        const int metric_dy = use_xz_metric ? 0 : 1;
 
         // Downstairs and upstairs metric
         CCTK_REAL gtt, gtx, gty, gtz, gxx, gxy, gxz, gyy, gyz, gzz;
@@ -195,7 +198,7 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
             // Parameters
             mass, spin, epsilon,
             // Current point
-            t, x, y, z,
+            t, x, metric_y, z,
             // Downstairs metric
             gtt, gtx, gty, gtz, gxx, gxy, gxz, gyy, gyz, gzz,
             // Upstairs metric
@@ -210,7 +213,7 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
             // Parameters
             mass, spin, epsilon,
             // Current point
-            t, x, y, z,
+            t, x, metric_y, z,
             // Derivative direction
             1, 0, 0, 0,
             // Downstairs metric
@@ -229,7 +232,7 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
             // Parameters
             mass, spin, epsilon,
             // Current point
-            t, x, y, z,
+            t, x, metric_y, z,
             // Derivative direction
             0, 1, 0, 0,
             // Downstairs metric
@@ -248,9 +251,9 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
             // Parameters
             mass, spin, epsilon,
             // Current point
-            t, x, y, z,
+            t, x, metric_y, z,
             // Derivative direction
-            0, 0, 1, 0,
+            0, 0, metric_dy, 0,
             // Downstairs metric
             dygtt, dygtx, dygty, dygtz, dygxx, dygxy, dygxz, dygyy, dygyz,
             dygzz,
@@ -267,7 +270,7 @@ extern "C" void KerrSchildX_InitialData(CCTK_ARGUMENTS) {
             // Parameters
             mass, spin, epsilon,
             // Current point
-            t, x, y, z,
+            t, x, metric_y, z,
             // Derivative direction
             0, 0, 0, 1,
             // Downstairs metric
