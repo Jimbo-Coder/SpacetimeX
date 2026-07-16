@@ -2,6 +2,7 @@
 
 #include <cctk.h>
 #include <cctk_Arguments.h>
+#include <cctk_Parameter.h>
 #include <cctk_Parameters.h>
 #include <util_Table.h>
 
@@ -18,6 +19,46 @@ static PunctureContainer *g_punctures = nullptr;
 static int previous_iteration = 0;
 
 const int max_num_tracked = 10;
+
+static int getCarpetXFinestLevel() {
+  int type = 0;
+  const void *const value =
+      CCTK_ParameterGet("max_num_levels", "CarpetX", &type);
+  if (value == nullptr || type != PARAMETER_INT) {
+    CCTK_ERROR("Could not query CarpetX::max_num_levels for "
+               "PunctureTracker level-cadence tracking. Set "
+               "PunctureTracker::tracking_finest_level explicitly.");
+  }
+
+  const int maxNumLevels = int(*static_cast<const CCTK_INT *>(value));
+  if (maxNumLevels < 1) {
+    CCTK_VERROR("Invalid CarpetX::max_num_levels=%d", maxNumLevels);
+  }
+
+  return maxNumLevels - 1;
+}
+
+static bool shouldTrackThisIteration(const CCTK_INT iteration,
+                                     const int trackingLevel,
+                                     const int finestLevel) {
+  if (trackingLevel < 0) {
+    CCTK_ERROR("tracking_level_mode='level' requires tracking_level >= 0");
+  }
+  if (trackingLevel > finestLevel) {
+    CCTK_VERROR("PunctureTracker::tracking_level=%d is finer than finest "
+                "tracking level=%d",
+                trackingLevel, finestLevel);
+  }
+
+  const int levelDifference = finestLevel - trackingLevel;
+  if (levelDifference >= int(8 * sizeof(CCTK_INT) - 1)) {
+    CCTK_VERROR("PunctureTracker level cadence 2^%d overflows CCTK_INT",
+                levelDifference);
+  }
+
+  const CCTK_INT stride = CCTK_INT(1) << levelDifference;
+  return stride <= 1 || iteration % stride == 0;
+}
 
 extern "C" void PunctureTracker_Init(CCTK_ARGUMENTS) {
   DECLARE_CCTK_ARGUMENTS_PunctureTracker_Init;
@@ -76,6 +117,17 @@ extern "C" void PunctureTracker_Setup(CCTK_ARGUMENTS) {
   g_punctures->getBeta()[0].resize(nPunctures);
   g_punctures->getBeta()[1].resize(nPunctures);
   g_punctures->getBeta()[2].resize(nPunctures);
+  g_punctures->getPreviousBeta()[0].resize(nPunctures);
+  g_punctures->getPreviousBeta()[1].resize(nPunctures);
+  g_punctures->getPreviousBeta()[2].resize(nPunctures);
+
+  for (int i = 0; i < Loop::dim; ++i) {
+    for (int n = 0; n < nPunctures; ++n) {
+      g_punctures->getPreviousBeta()[i][n] =
+          -g_punctures->getVelocity()[i][n];
+    }
+  }
+
   g_punctures->setNumPunctures();
   assert(g_punctures->getNumPunctures() == nPunctures);
 
@@ -115,6 +167,16 @@ extern "C" void PunctureTracker_Track(CCTK_ARGUMENTS) {
   // Do not track while setting up initial data; time interpolation may fail
   if (cctk_iteration == 0) {
     return;
+  }
+
+  if (CCTK_EQUALS(tracking_level_mode, "level")) {
+    const int finestLevel =
+        tracking_finest_level >= 0 ? int(tracking_finest_level)
+                                   : getCarpetXFinestLevel();
+    if (!shouldTrackThisIteration(cctk_iteration, int(tracking_level),
+                                  finestLevel)) {
+      return;
+    }
   }
 
   // Some output

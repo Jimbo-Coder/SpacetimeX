@@ -32,8 +32,40 @@ INT interp_order "Shift interpolation order"
   0:* :: ""
 } 1
 
+KEYWORD interp_level_mode "AMR level selection for shift interpolation"
+{
+  "finest" :: "Use CarpetX's default finest covering AMR level"
+  "max_level" :: "Use the finest covering AMR level no finer than interp_max_level"
+} "finest"
+
+INT interp_max_level "Maximum AMR level used for shift interpolation when interp_level_mode=max_level"
+{
+  -1:* :: "negative disables the level cap"
+} -1
+
+KEYWORD tracking_level_mode "Cadence used for puncture position updates"
+{
+  "every_call" :: "Track on every scheduled PunctureTracker_Track call"
+  "level" :: "Track only on the timestep cadence of tracking_level"
+} "every_call"
+
+INT tracking_level "AMR level whose timestep cadence is used when tracking_level_mode=level"
+{
+  -1:* :: "negative disables level-cadence tracking"
+} -1
+
+INT tracking_finest_level "Finest AMR level used to compute level-cadence tracking; negative queries CarpetX::max_num_levels"
+{
+  -1:* :: "negative means query CarpetX::max_num_levels at runtime"
+} -1
+
+KEYWORD time_integrator "Time integrator for puncture positions"
+{
+  "euler" :: "Use the original first-order update x += -dt beta"
+  "trapezoidal" :: "Use a second-order update x += -0.5 dt (beta_new + beta_old)"
+} "euler"
+
 REAL shift_limit "Shift components must be less than this in magnitude"
 {
   0.0:* :: "zero or positive"
 } 1.0e10
-

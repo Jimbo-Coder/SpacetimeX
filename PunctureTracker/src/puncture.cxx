@@ -3,6 +3,7 @@
 
 #include "puncture.hxx"
 
+#include <cctk_Parameters.h>
 #include <util_Table.h>
 
 namespace PunctureTracker {
@@ -57,6 +58,17 @@ void PunctureContainer::interpolate(CCTK_ARGUMENTS) {
     CCTK_VERROR("Can't set order in parameter table: %d", ierr);
   }
 
+  if (CCTK_EQUALS(interp_level_mode, "max_level")) {
+    if (interp_max_level < 0) {
+      CCTK_ERROR("interp_level_mode='max_level' requires interp_max_level >= 0");
+    }
+
+    ierr = Util_TableSetInt(paramTableHandle, interp_max_level, "max_level");
+    if (ierr < 0) {
+      CCTK_VERROR("Can't set max_level in parameter table: %d", ierr);
+    }
+  }
+
   // Perform the interpolation
   ierr = DriverInterpolate(cctkGH, Loop::dim, interpHandle, paramTableHandle,
                            coordSystemHandle, nPoints, interpCoordsTypeCode,
@@ -72,15 +84,19 @@ void PunctureContainer::interpolate(CCTK_ARGUMENTS) {
 }
 
 void PunctureContainer::evolve(CCTK_ARGUMENTS) {
+  DECLARE_CCTK_PARAMETERS;
+
   if (CCTK_MyProc(cctkGH) == 0) {
-    // First order time integrator
-    // Michael Koppitz says this works...
-    // if it doesn't, we can make it second order accurate
     for (int n = 0; n < numPunctures_; ++n) {
       const CCTK_REAL dt = time_[n] - previousTime_[n];
       for (int i = 0; i < Loop::dim; ++i) {
-        location_[i][n] += dt * (-beta_[i][n]);
+        const CCTK_REAL beta_eff =
+            CCTK_EQUALS(time_integrator, "trapezoidal")
+                ? 0.5 * (beta_[i][n] + previousBeta_[i][n])
+                : beta_[i][n];
+        location_[i][n] += dt * (-beta_eff);
         velocity_[i][n] = -beta_[i][n];
+        previousBeta_[i][n] = beta_[i][n];
       }
     }
   }

@@ -36,6 +36,10 @@ public:
 
   std::array<std::vector<CCTK_REAL>, Loop::dim> &getBeta() { return beta_; }
 
+  std::array<std::vector<CCTK_REAL>, Loop::dim> &getPreviousBeta() {
+    return previousBeta_;
+  }
+
   void updatePreviousTime(CCTK_ARGUMENTS);
 
   void interpolate(CCTK_ARGUMENTS);
@@ -50,6 +54,7 @@ private:
   std::array<std::vector<CCTK_REAL>, Loop::dim> location_;
   std::array<std::vector<CCTK_REAL>, Loop::dim> velocity_;
   std::array<std::vector<CCTK_REAL>, Loop::dim> beta_;
+  std::array<std::vector<CCTK_REAL>, Loop::dim> previousBeta_;
 };
 
 } // namespace PunctureTracker
