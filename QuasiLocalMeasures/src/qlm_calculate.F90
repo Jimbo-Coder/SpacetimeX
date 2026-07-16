@@ -13,9 +13,9 @@ subroutine qlm_calculate (CCTK_ARGUMENTS)
   DECLARE_CCTK_FUNCTIONS
   DECLARE_CCTK_PARAMETERS
   
-  integer   :: num_procs, my_proc
-  integer   :: pass
-  integer   :: h0, hn
+  integer   :: my_proc
+  integer   :: hn
+  integer, parameter :: qlm_root_proc = 0
   
   character :: msg*1000
   character :: slabel*2, ilabel*8
@@ -23,65 +23,66 @@ subroutine qlm_calculate (CCTK_ARGUMENTS)
   integer   :: nchars
  
   logical   :: did_allocate
+  logical   :: do_surface
+  logical   :: owns_surface
   
   did_allocate = .false.
   
-  num_procs = CCTK_nProcs (cctkGH)
   my_proc   = CCTK_MyProc (cctkGH)
-  do pass = 1, (num_surfaces + num_procs - 1) / num_procs
-     
-     ! Calculate the range of horizons for this pass
-     h0 = (pass - 1) * num_procs + 1
-     
-     ! This processor's horizon
-     hn = h0 + my_proc
-     
-     ! If there is nothing to do for this processor, set hn to zero
-     if (hn > num_surfaces) hn = 0
-    
-     ! start calculations already? 
-     if (hn > 0) then
-        if (cctk_time < begin_qlm_calculations_after(hn)) hn = 0
+
+  if (calculate_every <= 0) return
+
+  if (mod(cctk_iteration, calculate_every) /= 0) then
+     if (my_proc == qlm_root_proc .and. veryverbose/=0) then
+        write (msg, '("Skipping quasi-local quantities at iteration ",i8)') cctk_iteration
+        call CCTK_INFO (msg)
      end if
+     return
+  end if
+
+  if (num_surfaces > 0) then
+     call allocate_variables (int(maxntheta), int(maxnphi))
+     did_allocate = .true.
+  end if
+
+  do hn = 1, num_surfaces
+
+     owns_surface = my_proc == qlm_root_proc
+     do_surface = .true.
+
+     ! start calculations already? 
+     if (cctk_time < begin_qlm_calculations_after(hn)) do_surface = .false.
      
-     if (verbose/=0 .or. veryverbose/=0) then
-        if (hn > 0) then
-           write (msg, '("Calculating quasi-local quantities for surface ",i4)') hn-1
+     if (owns_surface .and. (verbose/=0 .or. veryverbose/=0)) then
+        if (do_surface) then
+           write (msg, '("Calculating quasi-local quantities for surface ",i4)') hn - 1
         else
-           write (msg, '("Performing dummy calculation")')
+           write (msg, '("Skipping quasi-local quantities for surface ",i4)') hn - 1
         end if
         call CCTK_INFO (msg)
      end if
      
-     if (hn > 0) then
+     if (owns_surface .and. do_surface) then
         if (surface_index(hn) == -1 .and. CCTK_EQUALS(surface_name(hn), "")) then
            qlm_calc_error(hn) = 1
            qlm_have_valid_data(hn) = 0
            qlm_have_killing_vector(hn) = 0
-           hn = 0
+           do_surface = .false.
         end if
      end if
      
-     if (hn > 0) then
+     if (owns_surface .and. do_surface) then
         call qlm_import_surface (CCTK_PASS_FTOF, hn)
-        if (qlm_calc_error(hn) /= 0) hn = 0
+        if (qlm_calc_error(hn) /= 0) do_surface = .false.
      endif
      
-     if (hn > 0) then
+     if (owns_surface .and. do_surface) then
         call qlm_set_coordinates (CCTK_PASS_FTOF, hn)
      end if
      
-     if (hn > 0) then
-        if (.not. did_allocate) then
-           ! allocate 2D arrays
-           call allocate_variables (int(maxntheta), int(maxnphi))
-           did_allocate = .true.
-        end if
-     end if
-
-     call qlm_interpolate (CCTK_PASS_FTOF, hn)
+     call qlm_interpolate (CCTK_PASS_FTOF, hn, owns_surface .and. do_surface)
      
-     if (hn > 0) then
+     if (owns_surface .and. do_surface) then
         if (qlm_calc_error(hn) /= 0) goto 9999
         
         call qlm_calc_tetrad (CCTK_PASS_FTOF, hn)
@@ -93,10 +94,14 @@ subroutine qlm_calculate (CCTK_ARGUMENTS)
         else if (CCTK_EQUALS(killing_vector_method, "eigenvector")) then
            call qlm_killing_transport (CCTK_PASS_FTOF, hn)
            if (qlm_calc_error(hn) /= 0) goto 9999
-           call qlm_killing_normalise (CCTK_PASS_FTOF, hn)
+           if (qlm_have_killing_vector(hn) /= 0) then
+              call qlm_killing_normalise (CCTK_PASS_FTOF, hn)
+           end if
         else if (CCTK_EQUALS(killing_vector_method, "gradient")) then
            call qlm_killing_gradient (CCTK_PASS_FTOF, hn)
-           call qlm_killing_normalise (CCTK_PASS_FTOF, hn)
+           if (qlm_have_killing_vector(hn) /= 0) then
+              call qlm_killing_normalise (CCTK_PASS_FTOF, hn)
+           end if
         else
            call CCTK_WARN (0, "internal error")
         end if

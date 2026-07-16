@@ -48,7 +48,7 @@ contains
     f(       :gi, :nj) = -42
     f(ni-gi+1:ni, :nj) = -42
     f(:ni,        :gj) = -42
-    f(:ni, nj-gi+1:nj) = -42
+    f(:ni, nj-gj+1:nj) = -42
     
     allocate (ff(gi, nj))
     

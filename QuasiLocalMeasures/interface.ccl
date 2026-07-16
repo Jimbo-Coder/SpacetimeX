@@ -4,6 +4,21 @@ IMPLEMENTS: QuasiLocalMeasures
 
 INHERITS: ADMBaseX SphericalSurface TmunuBaseX
 
+void FUNCTION Interpolate(
+  CCTK_POINTER_TO_CONST IN cctkGH,
+  CCTK_INT IN npoints,
+  CCTK_REAL ARRAY IN coordsx,
+  CCTK_REAL ARRAY IN coordsy,
+  CCTK_REAL ARRAY IN coordsz,
+  CCTK_INT IN nvars,
+  CCTK_INT ARRAY IN varinds,
+  CCTK_INT ARRAY IN operations,
+  CCTK_INT IN allow_boundaries,
+  CCTK_POINTER IN resultptrs)
+REQUIRES FUNCTION Interpolate
+
+
+
 CCTK_POINTER_TO_CONST \
 FUNCTION GetMPICommWorld (CCTK_POINTER_TO_CONST IN cctkGH)
 USES FUNCTION GetMPICommWorld
@@ -15,7 +30,7 @@ USES FUNCTION sf_IdFromName
 
 
 
-INT qlm_state[num_surfaces] TYPE=scalar
+INT qlm_state[num_surfaces] TYPE=scalar TAGS='Checkpoint="no"'
 {
   qlm_calc_error          # some QLM information is invalid
   qlm_have_valid_data     # interpolating from the AH was successful
@@ -24,66 +39,66 @@ INT qlm_state[num_surfaces] TYPE=scalar
   qlm_iteration           # iteration for current data
 } "Status information"
 
-INT qlm_state_p[num_surfaces] TYPE=scalar
+INT qlm_state_p[num_surfaces] TYPE=scalar TAGS='Checkpoint="no"'
 {
   qlm_have_valid_data_p qlm_have_valid_data_p_p
   qlm_have_killing_vector_p qlm_have_killing_vector_p_p
 } "Previous status information"
   
-INT qlm_grid_int[num_surfaces] TYPE=scalar
+INT qlm_grid_int[num_surfaces] TYPE=scalar TAGS='Checkpoint="no"'
 {
   qlm_nghoststheta qlm_nghostsphi
   qlm_ntheta qlm_nphi
 } "Grid description"
 
-REAL qlm_grid_real[num_surfaces] TYPE=scalar
+REAL qlm_grid_real[num_surfaces] TYPE=scalar TAGS='Checkpoint="no"'
 {
   qlm_origin_x qlm_origin_y qlm_origin_z
   qlm_origin_theta qlm_origin_phi
   qlm_delta_theta qlm_delta_phi
 } "Grid description"
 
-REAL qlm_grid_real_p[num_surfaces] TYPE=scalar
+REAL qlm_grid_real_p[num_surfaces] TYPE=scalar TAGS='Checkpoint="no"'
 {
   qlm_origin_x_p qlm_origin_y_p qlm_origin_z_p
   qlm_origin_x_p_p qlm_origin_y_p_p qlm_origin_z_p_p
 } "Previous grid description"
 
-REAL qlm_shapes[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='convergence_power=1'
+REAL qlm_shapes[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='Checkpoint="no",convergence_power=1'
 {
   qlm_shape
 } "Shape of the surface"
 
-REAL qlm_shapes_p[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='convergence_power=1'
+REAL qlm_shapes_p[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='Checkpoint="no",convergence_power=1'
 {
   qlm_shape_p qlm_shape_p_p
 } "Previous shapes of the surface"
 
-REAL qlm_coordinates[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='convergence_power=1'
+REAL qlm_coordinates[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='Checkpoint="no",convergence_power=1'
 {
   qlm_x qlm_y qlm_z
 } "Cartesian coordinates of the grid points on the surface"
 
 # TODO: make this group private, i.e., move it into qlm_variables.F90
-REAL qlm_coordinates_p[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='convergence_power=1'
+REAL qlm_coordinates_p[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='Checkpoint="no",convergence_power=1'
 {
   qlm_x_p qlm_y_p qlm_z_p
   qlm_x_p_p qlm_y_p_p qlm_z_p_p
 } "Past Cartesian coordinates of the grid points on the surface"
 
-REAL qlm_tetrad_l[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='convergence_power=1'
+REAL qlm_tetrad_l[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='Checkpoint="no",convergence_power=1'
 {
   # all components are contravariant
   qlm_l0 qlm_l1 qlm_l2 qlm_l3       # outward null normal
 } "Tetrad vector l^mu"
 
-REAL qlm_tetrad_n[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='convergence_power=1'
+REAL qlm_tetrad_n[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='Checkpoint="no",convergence_power=1'
 {
   # all components are contravariant
   qlm_n0 qlm_n1 qlm_n2 qlm_n3       # inward null normal
 } "Tetrad vector n^mu"
 
-COMPLEX qlm_tetrad_m[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='convergence_power=1'
+COMPLEX qlm_tetrad_m[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='Checkpoint="no",convergence_power=1'
 {
   # all components are contravariant
   qlm_m0 qlm_m1 qlm_m2 qlm_m3       # null normal within surface
@@ -133,7 +148,7 @@ REAL qlm_twometric[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxnthe
   qlm_rsc                       # 2-Ricci scalar
 } "2-metric"
 
-REAL qlm_killing_vector[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='convergence_power=1'
+REAL qlm_killing_vector[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxntheta,SphericalSurface::maxnphi DISTRIB=constant TAGS='Checkpoint="no",convergence_power=1'
 {
   qlm_xi_t qlm_xi_p
   qlm_chi
@@ -160,7 +175,7 @@ REAL qlm_3determinant[num_surfaces] TYPE=array DIM=2 SIZE=SphericalSurface::maxn
   qlm_3det
 } "3-Determinant of H for a special choice of the triad"
 
-REAL qlm_scalars[num_surfaces] TYPE=scalar
+REAL qlm_scalars[num_surfaces] TYPE=scalar TAGS='Checkpoint="no"'
 {
   qlm_time
   qlm_equatorial_circumference
@@ -183,7 +198,7 @@ REAL qlm_scalars[num_surfaces] TYPE=scalar
   qlm_w_angular_momentum_x qlm_w_angular_momentum_y qlm_w_angular_momentum_z
 } "Scalar quantities on the surface"
 
-REAL qlm_scalars_p[num_surfaces] TYPE=scalar
+REAL qlm_scalars_p[num_surfaces] TYPE=scalar TAGS='Checkpoint="no"'
 {
   qlm_time_p qlm_time_p_p
   qlm_radius_p qlm_radius_p_p

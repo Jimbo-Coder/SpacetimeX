@@ -55,12 +55,15 @@ subroutine qlm_analyse (CCTK_ARGUMENTS, hn)
   
   integer   :: i, j, l, m
   integer   :: a, b, c
+  logical   :: have_killing_vector
   
   character :: msg*1000
   
   if (veryverbose/=0) then
      call CCTK_INFO ("Calculating spin")
   end if
+  
+  have_killing_vector = qlm_have_killing_vector(hn) /= 0
   
   delta_space(:) = (/ qlm_delta_theta(hn), qlm_delta_phi(hn) /)
   
@@ -233,8 +236,12 @@ subroutine qlm_analyse (CCTK_ARGUMENTS, hn)
         ee(2,1:2) = deriv (qlm_y(:,:,hn), i, j, delta_space)
         ee(3,1:2) = deriv (qlm_z(:,:,hn), i, j, delta_space)
         
-        xi(1) = qlm_xi_t(i,j,hn)
-        xi(2) = qlm_xi_p(i,j,hn)
+        if (have_killing_vector) then
+           xi(1) = qlm_xi_t(i,j,hn)
+           xi(2) = qlm_xi_p(i,j,hn)
+        else
+           xi(:) = 0
+        end if
         
         if (i == i_eq) then
            qlm_equatorial_circumference(hn) = qlm_equatorial_circumference(hn) &
@@ -268,24 +275,31 @@ subroutine qlm_analyse (CCTK_ARGUMENTS, hn)
         ! phi^i omega_i = - phi^i s^j K_ij
         
         spin = 0
-        do a=1,3
-           do b=1,3
-              spin = spin + xi1(a) * ss(b) * kk(a,b)
+        if (have_killing_vector) then
+           do a=1,3
+              do b=1,3
+                 spin = spin + xi1(a) * ss(b) * kk(a,b)
+              end do
            end do
-        end do
+        end if
         qlm_spin_density(i,j) = spin
         
         ! phi^i omega_i = (alpha + ~beta) phi^i m_i + complex conjugate
         npspin = 0
-        do a=1,3
-           do b=1,3
-              npspin = npspin + 2 * real((npalpha + conjg(npbeta)) * xi1(a) * gg(a,b) * mm(b))
+        if (have_killing_vector) then
+           do a=1,3
+              do b=1,3
+                 npspin = npspin + 2 * real((npalpha + conjg(npbeta)) * xi1(a) * gg(a,b) * mm(b))
+              end do
            end do
-        end do
+        end if
         
         ! phi^i omega_i = 1/2 f Im Psi_2
         ! (or is it   phi^i omega_i = - f Im Psi_2   ?)
-        wsspin = - qlm_inv_z(i,j,hn) * aimag(qlm_psi2(i,j,hn))
+        wsspin = 0
+        if (have_killing_vector) then
+           wsspin = - qlm_inv_z(i,j,hn) * aimag(qlm_psi2(i,j,hn))
+        end if
         
         ! x = sin theta cos phi
         ! y = sin theta sin phi
@@ -346,7 +360,7 @@ subroutine qlm_analyse (CCTK_ARGUMENTS, hn)
         end do
         qlm_adm_energy(hn) = qlm_adm_energy(hn) &
              & + adm_energy / (16*pi) &
-             &   * sqrt(dtq) * qlm_delta_theta(hn) * qlm_delta_phi(hn)
+             &   * sqrt(dtq) * weights(i)
         
         ! ADM momentum
         ! P_adm^i = (1/8 pi) int_S(r) [K^i_j - K delta^i_j] n^j r^2 dOmega
@@ -358,18 +372,18 @@ subroutine qlm_analyse (CCTK_ARGUMENTS, hn)
              &        + gu(a,c) * kk(c,b) * ss(b) 
               end do
               adm_mom(a) = adm_mom(a) &
-                   + delta3(a,b) * trk * ss(b) 
+                   - delta3(a,b) * trk * ss(b) 
            end do
         end do
         qlm_adm_momentum_x(hn) = qlm_adm_momentum_x(hn) &
              & + adm_mom(1) / (8*pi) &
-             &   * sqrt(dtq) * qlm_delta_theta(hn) * qlm_delta_phi(hn)
+             &   * sqrt(dtq) * weights(i)
         qlm_adm_momentum_y(hn) = qlm_adm_momentum_y(hn) &
              & + adm_mom(2) / (8*pi) &
-             &   * sqrt(dtq) * qlm_delta_theta(hn) * qlm_delta_phi(hn)
+             &   * sqrt(dtq) * weights(i)
         qlm_adm_momentum_z(hn) = qlm_adm_momentum_z(hn) &
              & + adm_mom(3) / (8*pi) &
-             &   * sqrt(dtq) * qlm_delta_theta(hn) * qlm_delta_phi(hn)
+             &   * sqrt(dtq) * weights(i)
         
         ! ADM angular momentum
         ! J_adm^i = (1/8 pi) int_S(r)
@@ -391,13 +405,13 @@ subroutine qlm_analyse (CCTK_ARGUMENTS, hn)
         end do
         qlm_adm_angular_momentum_x(hn) = qlm_adm_angular_momentum_x(hn) &
              & + adm_amom(1) / (8*pi) &
-             &   * sqrt(dtq) * qlm_delta_theta(hn) * qlm_delta_phi(hn)
+             &   * sqrt(dtq) * weights(i)
         qlm_adm_angular_momentum_y(hn) = qlm_adm_angular_momentum_y(hn) &
              & + adm_amom(2) / (8*pi) &
-             &   * sqrt(dtq) * qlm_delta_theta(hn) * qlm_delta_phi(hn)
+             &   * sqrt(dtq) * weights(i)
         qlm_adm_angular_momentum_z(hn) = qlm_adm_angular_momentum_z(hn) &
              & + adm_amom(3) / (8*pi) &
-             &   * sqrt(dtq) * qlm_delta_theta(hn) * qlm_delta_phi(hn)
+             &   * sqrt(dtq) * weights(i)
 
         ! Weinberg pseudotensor quantities
         ! Weinberg, chapter 7.6, pp. 165 ff, eqns. (7.6.22) - (7.6.24):

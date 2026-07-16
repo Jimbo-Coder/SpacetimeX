@@ -136,11 +136,10 @@ CCTK_FNAME(qlm_broadcast) (CCTK_POINTER_TO_CONST * restrict const cctkGH_)
     CCTK_INFO ("Broadcasting quasi-local measures");
   }
   
-  int const num_procs = CCTK_nProcs (cctkGH);
   int hn; 
   for (hn = 0; hn < num_surfaces; ++ hn)
   {
-    int const root = hn % num_procs;
+    int const root = 0;
     
     bcast (cctkGH, "QuasiLocalMeasures::qlm_state"      , hn, root);
     bcast (cctkGH, "QuasiLocalMeasures::qlm_state_p"    , hn, root);
@@ -151,6 +150,7 @@ CCTK_FNAME(qlm_broadcast) (CCTK_POINTER_TO_CONST * restrict const cctkGH_)
     bcast (cctkGH, "QuasiLocalMeasures::qlm_shapes"               , hn, root);
     bcast (cctkGH, "QuasiLocalMeasures::qlm_shapes_p"             , hn, root);
     bcast (cctkGH, "QuasiLocalMeasures::qlm_coordinates"          , hn, root);
+    bcast (cctkGH, "QuasiLocalMeasures::qlm_coordinates_p"        , hn, root);
     bcast (cctkGH, "QuasiLocalMeasures::qlm_tetrad_l"             , hn, root);
     bcast (cctkGH, "QuasiLocalMeasures::qlm_tetrad_n"             , hn, root);
     bcast (cctkGH, "QuasiLocalMeasures::qlm_tetrad_m"             , hn, root);
@@ -170,4 +170,49 @@ CCTK_FNAME(qlm_broadcast) (CCTK_POINTER_TO_CONST * restrict const cctkGH_)
     bcast (cctkGH, "QuasiLocalMeasures::qlm_scalars_p", hn, root);
     
   } /* for hn */
+}
+
+
+void CCTK_FCALL
+CCTK_FNAME(qlm_sum_npoints) (CCTK_POINTER_TO_CONST * restrict cctkGH_,
+                             CCTK_INT const * restrict local_npoints,
+                             CCTK_INT * restrict total_npoints);
+
+void CCTK_FCALL
+CCTK_FNAME(qlm_sum_npoints) (CCTK_POINTER_TO_CONST * restrict const cctkGH_,
+                             CCTK_INT const * restrict const local_npoints,
+                             CCTK_INT * restrict const total_npoints)
+{
+  CCTK_INT total = *local_npoints;
+
+#ifdef CCTK_MPI
+  cGH const * restrict const cctkGH = * (cGH const * const *) cctkGH_;
+
+  MPI_Comm comm;
+  if (CCTK_IsFunctionAliased ("GetMPICommWorld"))
+  {
+    comm = * (MPI_Comm const *) GetMPICommWorld (cctkGH);
+  }
+  else
+  {
+    comm = MPI_COMM_WORLD;
+  }
+
+  MPI_Datatype mpitype;
+  if (sizeof (CCTK_INT) == sizeof (int)) {
+    mpitype = MPI_INT;
+  } else if (sizeof (CCTK_INT) == sizeof (long)) {
+    mpitype = MPI_LONG;
+  } else if (sizeof (CCTK_INT) == sizeof (long long)) {
+    mpitype = MPI_LONG_LONG;
+  } else {
+    CCTK_ERROR("Unsupported CCTK_INT type");
+  }
+
+  MPI_Allreduce (local_npoints, &total, 1, mpitype, MPI_SUM, comm);
+#else
+  (void)cctkGH_;
+#endif
+
+  *total_npoints = total;
 }

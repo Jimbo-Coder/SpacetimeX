@@ -29,8 +29,9 @@ subroutine qlm_killing_transport (CCTK_ARGUMENTS, hn)
   CCTK_REAL    :: xi(2,3), chi(3)
   CCTK_REAL    :: vec(3,3)
   CCTK_REAL    :: wr(3), wi(3), vl(3,3), vr(3,3)
+  CCTK_REAL    :: eig_error, best_error
   integer      :: i0, j0
-  integer      :: n
+  integer      :: n, best
   integer(lik) :: info
   character    :: msg*1000
   
@@ -116,11 +117,22 @@ subroutine qlm_killing_transport (CCTK_ARGUMENTS, hn)
   ! TODO:
   ! This transport scheme is not ideal.
   ! It leads to large fluctuations in the phi direction.
-  n=3
+  best = 1
+  best_error = abs(cmplx(wr(1), wi(1), kind(wr)) - (1,0))
+  do n=2,3
+     eig_error = abs(cmplx(wr(n), wi(n), kind(wr)) - (1,0))
+     if (eig_error < best_error) then
+        best = n
+        best_error = eig_error
+     end if
+  end do
+  n = best
   qlm_killing_eigenvalue_re(hn) = wr(n)
   qlm_killing_eigenvalue_im(hn) = wi(n)
-  if (abs(cmplx(wr(n),wi(n),kind(wr)) - (1,0)) > 1.0d-4) then
+  if (best_error > 1.0d-4) then
+     qlm_have_killing_vector(hn) = 0
      call CCTK_WARN (3, "Did not manage to find an eigenvector with the eigenvalue 1")
+     goto 9999
   end if
   call transport_along_equator (CCTK_PASS_FTOF, hn, i0, xi(:,n), chi(n))
   call transport_along_meridians (CCTK_PASS_FTOF, hn, i0)
