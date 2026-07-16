@@ -60,24 +60,24 @@ CCTK_REAL veta_outer "" STEERABLE=always
 KEYWORD eta_profile "Spatial profile for the Gamma-driver shift damping eta"
 {
   "radial" :: "Use the existing radial veta_central/veta_outer profile"
-  "puncture_tracker" :: "Use PunctureTracker locations to build a position-dependent profile"
-  "radial_puncture_tracker" :: "Use the existing radial profile as a baseline and blend to PunctureTracker-centered values near each puncture"
+  "puncture_tracker" :: "Use PunctureTracker locations and masses to build a position-dependent profile"
+  "radial_puncture_tracker" :: "Use the existing radial profile as a baseline for a PunctureTracker-centered position-dependent profile"
 } "radial"
 
-CCTK_INT eta_num_punctures "Number of PunctureTracker locations used by the position-dependent eta profile" STEERABLE=always
+CCTK_REAL eta_reference_mass "Reference mass m0 in the position-dependent eta profile; non-positive uses the smallest active puncture mass" STEERABLE=always
 {
-  0:10 :: "PunctureTracker provides ten slots"
-} 0
+  *:* :: "non-positive selects the smallest active puncture mass"
+} -1.0
 
-CCTK_REAL eta_puncture[10] "Near-puncture eta value for the position-dependent eta profile" STEERABLE=always
+CCTK_REAL eta_profile_coefficient "Overall coefficient C for the position-dependent eta profile" STEERABLE=always
 {
-  0:* :: "eta is a damping rate"
-} 0.5
+  *:* :: ""
+} 1.0
 
-CCTK_REAL eta_puncture_width[10] "Coordinate width of each puncture contribution to the position-dependent eta profile" STEERABLE=always
+CCTK_INT eta_profile_power "Power n in the generalized denominator 1 + w_i (r_i/m0)^(2n)" STEERABLE=always
 {
-  (0:* :: "width must be positive"
-} 12.0
+  1:8 :: "positive integer"
+} 1
 
 CCTK_REAL eta_profile_min "Lower clamp for the position-dependent eta profile" STEERABLE=always
 {

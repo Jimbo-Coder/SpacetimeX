@@ -43,9 +43,12 @@ struct PunctureEtaProfile {
   CCTK_REAL x[max_eta_punctures] = {};
   CCTK_REAL y[max_eta_punctures] = {};
   CCTK_REAL z[max_eta_punctures] = {};
-  CCTK_REAL eta[max_eta_punctures] = {};
-  CCTK_REAL width[max_eta_punctures] = {};
-  CCTK_REAL outer = 0.0;
+  CCTK_REAL mass[max_eta_punctures] = {};
+  CCTK_REAL weight[max_eta_punctures] = {};
+  CCTK_REAL eta0 = 0.0;
+  CCTK_REAL reference_mass = 1.0;
+  CCTK_REAL coefficient = 1.0;
+  CCTK_INT power = 1;
   CCTK_REAL eta_min = 0.0;
   CCTK_REAL eta_max = 0.0;
 };
@@ -69,6 +72,14 @@ ARITH_DEVICE ARITH_INLINE CCTK_REAL radial_eta(
 }
 
 ARITH_DEVICE ARITH_INLINE CCTK_REAL
+integer_power(const CCTK_REAL base, const CCTK_INT power) {
+  CCTK_REAL result = 1.0;
+  for (int n = 0; n < power; ++n)
+    result *= base;
+  return result;
+}
+
+ARITH_DEVICE ARITH_INLINE CCTK_REAL
 puncture_tracker_eta(const PunctureEtaProfile &profile, const CCTK_REAL x,
                      const CCTK_REAL y, const CCTK_REAL z,
                      const CCTK_REAL fallback_eta) {
@@ -76,10 +87,11 @@ puncture_tracker_eta(const PunctureEtaProfile &profile, const CCTK_REAL x,
     return fallback_eta;
 
   const CCTK_REAL baseline =
-      profile.radial_baseline ? fallback_eta : profile.outer;
+      profile.radial_baseline ? fallback_eta : profile.eta0;
 
-  CCTK_REAL weight_sum = 0.0;
-  CCTK_REAL eta_weighted = 0.0;
+  CCTK_REAL eta_value = baseline;
+  const CCTK_REAL inv_m0_sq =
+      1.0 / (profile.reference_mass * profile.reference_mass);
   for (int n = 0; n < max_eta_punctures; ++n) {
     if (n >= profile.num_punctures)
       break;
@@ -88,22 +100,14 @@ puncture_tracker_eta(const PunctureEtaProfile &profile, const CCTK_REAL x,
     const CCTK_REAL dy = y - profile.y[n];
     const CCTK_REAL dz = z - profile.z[n];
     const CCTK_REAL r2 = dx * dx + dy * dy + dz * dz;
-    const CCTK_REAL r4 = r2 * r2;
-    const CCTK_REAL w = profile.width[n];
-    const CCTK_REAL w4 = w * w * w * w;
-    const CCTK_REAL weight = exp(-r4 / w4);
+    const CCTK_REAL rhat2 = r2 * inv_m0_sq;
+    const CCTK_REAL denominator =
+        1.0 + profile.weight[n] * integer_power(rhat2, profile.power);
 
-    weight_sum += weight;
-    eta_weighted += weight * profile.eta[n];
+    eta_value += profile.coefficient *
+                 (1.0 / profile.mass[n] - baseline) / denominator;
   }
 
-  if (weight_sum <= 0.0)
-    return clamp_eta(baseline, profile.eta_min, profile.eta_max);
-
-  const CCTK_REAL eta_near = eta_weighted / weight_sum;
-  const CCTK_REAL blend = weight_sum < 1.0 ? weight_sum : 1.0;
-  const CCTK_REAL eta_value =
-      baseline + blend * (eta_near - baseline);
   return clamp_eta(eta_value, profile.eta_min, profile.eta_max);
 }
 
@@ -117,8 +121,11 @@ extern "C" void Z4c_RHS(CCTK_ARGUMENTS) {
       CCTK_EQUALS(eta_profile, "radial_puncture_tracker");
   eta_profile_data.radial_baseline =
       CCTK_EQUALS(eta_profile, "radial_puncture_tracker");
-  eta_profile_data.num_punctures = eta_num_punctures;
-  eta_profile_data.outer = veta_outer;
+  eta_profile_data.num_punctures = 0;
+  eta_profile_data.eta0 = eta;
+  eta_profile_data.reference_mass = eta_reference_mass;
+  eta_profile_data.coefficient = eta_profile_coefficient;
+  eta_profile_data.power = eta_profile_power;
   eta_profile_data.eta_min = eta_profile_min;
   eta_profile_data.eta_max = eta_profile_max;
 
@@ -128,35 +135,89 @@ extern "C" void Z4c_RHS(CCTK_ARGUMENTS) {
                 double(eta_profile_data.eta_max));
 
   if (eta_profile_data.enabled) {
-    if (eta_profile_data.num_punctures <= 0)
-      CCTK_ERROR("PunctureTracker eta profiles require "
-                 "eta_num_punctures > 0");
+    const auto pt_num_tracked_ptr = static_cast<const CCTK_INT *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_num_tracked"));
+    const auto pt_num_groups_ptr = static_cast<const CCTK_INT *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_num_groups"));
+    const auto pt_mass_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_mass"));
+    const auto pt_group_x_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_group_x"));
+    const auto pt_group_y_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_group_y"));
+    const auto pt_group_z_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_group_z"));
+    const auto pt_group_mass_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_group_mass"));
+    const auto pt_group_eta_weight_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_group_eta_weight"));
 
-    const auto pt_loc_x_ptr = static_cast<const CCTK_REAL *>(
-        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_loc_x"));
-    const auto pt_loc_y_ptr = static_cast<const CCTK_REAL *>(
-        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_loc_y"));
-    const auto pt_loc_z_ptr = static_cast<const CCTK_REAL *>(
-        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_loc_z"));
-
-    if (!pt_loc_x_ptr || !pt_loc_y_ptr || !pt_loc_z_ptr)
+    if (!pt_num_tracked_ptr || !pt_num_groups_ptr || !pt_mass_ptr ||
+        !pt_group_x_ptr || !pt_group_y_ptr || !pt_group_z_ptr ||
+        !pt_group_mass_ptr || !pt_group_eta_weight_ptr)
       CCTK_ERROR("PunctureTracker eta profiles require active "
-                 "PunctureTracker::pt_loc_x/y/z scalars");
+                 "PunctureTracker grouped source scalars");
 
+    if (!isfinite(eta_profile_data.coefficient))
+      CCTK_VERROR("eta_profile_coefficient=%g must be finite",
+                  double(eta_profile_data.coefficient));
+
+    const CCTK_INT num_tracked = pt_num_tracked_ptr[0];
+    const CCTK_INT num_groups = pt_num_groups_ptr[0];
+    if (num_tracked <= 0 || num_tracked > max_eta_punctures)
+      CCTK_VERROR("PunctureTracker::pt_num_tracked=%d is invalid",
+                  int(num_tracked));
+    if (num_groups <= 0 || num_groups > max_eta_punctures)
+      CCTK_VERROR("PunctureTracker::pt_num_groups=%d is invalid",
+                  int(num_groups));
+
+    CCTK_REAL minimum_mass = pt_mass_ptr[0];
+    for (int n = 0; n < num_tracked; ++n) {
+      if (!isfinite(pt_mass_ptr[n]) || pt_mass_ptr[n] <= 0.0)
+        CCTK_VERROR("PunctureTracker::pt_mass[%d]=%g must be positive and "
+                    "finite",
+                    n, double(pt_mass_ptr[n]));
+      minimum_mass =
+          n == 0 ? pt_mass_ptr[n] : std::min(minimum_mass, pt_mass_ptr[n]);
+    }
+
+    eta_profile_data.reference_mass =
+        eta_profile_data.reference_mass > 0.0
+            ? eta_profile_data.reference_mass
+            : minimum_mass;
+    if (!isfinite(eta_profile_data.reference_mass) ||
+        eta_profile_data.reference_mass <= 0.0)
+      CCTK_VERROR("eta_reference_mass=%g must be positive when specified",
+                  double(eta_profile_data.reference_mass));
+
+    eta_profile_data.num_punctures = num_groups;
     for (int n = 0; n < eta_profile_data.num_punctures; ++n) {
-      eta_profile_data.x[n] = pt_loc_x_ptr[n];
-      eta_profile_data.y[n] = pt_loc_y_ptr[n];
-      eta_profile_data.z[n] = pt_loc_z_ptr[n];
-      eta_profile_data.eta[n] = eta_puncture[n];
-      eta_profile_data.width[n] = eta_puncture_width[n];
+      eta_profile_data.x[n] = pt_group_x_ptr[n];
+      eta_profile_data.y[n] = pt_group_y_ptr[n];
+      eta_profile_data.z[n] = pt_group_z_ptr[n];
+      eta_profile_data.mass[n] = pt_group_mass_ptr[n];
+      eta_profile_data.weight[n] = pt_group_eta_weight_ptr[n];
 
       if (!isfinite(eta_profile_data.x[n]) ||
           !isfinite(eta_profile_data.y[n]) ||
           !isfinite(eta_profile_data.z[n]))
-        CCTK_VERROR("PunctureTracker location %d is not finite: (%g,%g,%g)",
+        CCTK_VERROR("PunctureTracker grouped source %d is not finite: "
+                    "(%g,%g,%g)",
                     n, double(eta_profile_data.x[n]),
                     double(eta_profile_data.y[n]),
                     double(eta_profile_data.z[n]));
+
+      if (!isfinite(eta_profile_data.mass[n]) ||
+          eta_profile_data.mass[n] <= 0.0)
+        CCTK_VERROR("PunctureTracker::pt_group_mass[%d]=%g must be positive "
+                    "and finite",
+                    n, double(eta_profile_data.mass[n]));
+
+      if (!isfinite(eta_profile_data.weight[n]) ||
+          eta_profile_data.weight[n] < 0.0)
+        CCTK_VERROR("PunctureTracker::pt_group_eta_weight[%d]=%g must be "
+                    "non-negative and finite",
+                    n, double(eta_profile_data.weight[n]));
     }
   }
 
