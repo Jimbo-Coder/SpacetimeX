@@ -197,85 +197,97 @@ extern "C" void PunctureTracker_Track(CCTK_ARGUMENTS) {
   assert(!omp_in_parallel());
 #endif
 
+  if (g_punctures == nullptr) {
+    CCTK_ERROR("PunctureTracker_Track called before PunctureTracker_Setup");
+  }
+
+  bool doTrack = true;
+
   // we can remove this segment when global mode works
   if (cctk_iteration == previous_iteration) {
-    return;
+    doTrack = false;
   } else {
     previous_iteration = cctk_iteration;
   }
 
   // Do not track while setting up initial data; time interpolation may fail
   if (cctk_iteration == 0) {
-    return;
+    doTrack = false;
   }
 
-  if (CCTK_EQUALS(tracking_level_mode, "level")) {
+  if (doTrack && CCTK_EQUALS(tracking_level_mode, "level")) {
     const int finestLevel =
         tracking_finest_level >= 0 ? int(tracking_finest_level)
                                    : getCarpetXFinestLevel();
     if (!shouldTrackThisIteration(cctk_iteration, int(tracking_level),
                                   finestLevel)) {
-      return;
+      doTrack = false;
     }
   }
 
-  // Some output
-  if (verbose) {
-    CCTK_INFO("Tracking punctures...");
+  const int nPunctures = g_punctures->getNumPunctures();
+
+  if (doTrack) {
+    const std::array<std::vector<CCTK_REAL>, Loop::dim> &location =
+        g_punctures->getLocation();
+
+    // Some output
+    if (verbose) {
+      CCTK_INFO("Tracking punctures...");
+      for (int n = 0; n < nPunctures; ++n) {
+        CCTK_VINFO("Puncture #%d is at (%g,%g,%g)", n, double(location[0][n]),
+                   double(location[1][n]), double(location[2][n]));
+      }
+    }
+
+    // Manual time level cycling
+    g_punctures->updatePreviousTime(CCTK_PASS_CTOC);
+
+    // Interpolate
+    g_punctures->interpolate(CCTK_PASS_CTOC);
+
+    if (CCTK_MyProc(cctkGH) == 0) {
+      const std::array<std::vector<CCTK_REAL>, Loop::dim> &beta =
+          g_punctures->getBeta();
+
+      // More output
+      if (verbose) {
+        for (int n = 0; n < nPunctures; ++n) {
+          CCTK_VINFO("Shift at puncture #%d is at (%g,%g,%g)", n,
+                     double(beta[0][n]), double(beta[1][n]),
+                     double(beta[2][n]));
+        }
+      }
+
+      // Check for NaNs and large shift components
+      for (int n = 0; n < nPunctures; ++n) {
+        const CCTK_REAL norm = std::sqrt(beta[0][n] * beta[0][n] +
+                                         beta[1][n] * beta[1][n] +
+                                         beta[2][n] * beta[2][n]);
+
+        if (!CCTK_isfinite(norm) || norm > shift_limit) {
+          CCTK_VERROR("Shift at puncture #%d is (%g,%g,%g).  This likely "
+                      "indicates an error in the simulation.",
+                      n, double(beta[0][n]), double(beta[1][n]),
+                      double(beta[2][n]));
+        }
+      }
+    }
+
+    // Time evolution
+    g_punctures->evolve(CCTK_PASS_CTOC);
+
+    // Broadcast result: 3 components for location, 3 components for velocity
+    g_punctures->broadcast(CCTK_PASS_CTOC);
   }
 
-  const int nPunctures = g_punctures->getNumPunctures();
+  g_punctures->updateGroups(track_mergers, merger_distance_coefficient);
+
   const std::array<std::vector<CCTK_REAL>, Loop::dim> &location =
       g_punctures->getLocation();
   const std::array<std::vector<CCTK_REAL>, Loop::dim> &velocity =
       g_punctures->getVelocity();
   const std::vector<CCTK_REAL> &time = g_punctures->getTime();
-
-  if (verbose) {
-    for (int n = 0; n < nPunctures; ++n) {
-      CCTK_VINFO("Puncture #%d is at (%g,%g,%g)", n, double(location[0][n]),
-                 double(location[1][n]), double(location[2][n]));
-    }
-  }
-
-  // Manual time level cycling
-  g_punctures->updatePreviousTime(CCTK_PASS_CTOC);
-
-  // Interpolate
-  g_punctures->interpolate(CCTK_PASS_CTOC);
-
-  if (CCTK_MyProc(cctkGH) == 0) {
-    const std::array<std::vector<CCTK_REAL>, Loop::dim> &beta =
-        g_punctures->getBeta();
-
-    // More output
-    if (verbose) {
-      for (int n = 0; n < nPunctures; ++n) {
-        CCTK_VINFO("Shift at puncture #%d is at (%g,%g,%g)", n,
-                   double(beta[0][n]), double(beta[1][n]), double(beta[2][n]));
-      }
-    }
-
-    // Check for NaNs and large shift components
-    for (int n = 0; n < nPunctures; ++n) {
-      CCTK_REAL norm =
-          sqrt(pow(beta[0][n], 2) + pow(beta[1][n], 2) + pow(beta[2][n], 2));
-
-      if (!CCTK_isfinite(norm) || norm > shift_limit) {
-        CCTK_VERROR("Shift at puncture #%d is (%g,%g,%g).  This likely "
-                    "indicates an error in the simulation.",
-                    n, double(beta[0][n]), double(beta[1][n]),
-                    double(beta[2][n]));
-      }
-    }
-  }
-
-  // Time evolution
-  g_punctures->evolve(CCTK_PASS_CTOC);
-
-  // Broadcast result: 3 components for location, 3 components for velocity
-  g_punctures->broadcast(CCTK_PASS_CTOC);
-  g_punctures->updateGroups(track_mergers, merger_distance_coefficient);
 
   // Write to pt_loc_foo and pt_vel_foo
   pt_num_tracked[0] = nPunctures;

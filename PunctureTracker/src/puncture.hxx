@@ -8,13 +8,14 @@
 
 #include <cctk.h>
 
+#include <array>
 #include <vector>
 
 namespace PunctureTracker {
 
 class PunctureContainer {
 public:
-  PunctureContainer() {}
+  PunctureContainer() : numPunctures_(0) {}
 
   virtual ~PunctureContainer() = default; // Use default for trivial destructors
 

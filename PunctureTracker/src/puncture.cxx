@@ -57,7 +57,8 @@ void PunctureContainer::interpolate(CCTK_ARGUMENTS) {
   // DriverInterpolate arguments that aren't currently used
   const int coordSystemHandle = 0;
   const CCTK_INT interpCoordsTypeCode = 0;
-  const CCTK_INT outputArrayTypes[1] = {0};
+  const CCTK_INT outputArrayTypes[nInputArrays] = {
+      CCTK_VARIABLE_REAL, CCTK_VARIABLE_REAL, CCTK_VARIABLE_REAL};
 
   const int interpHandle = CCTK_InterpHandle("CarpetX");
   if (interpHandle < 0) {
