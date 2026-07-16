@@ -25,6 +25,8 @@
 #include <nvtx3/nvToolsExt.h>
 #endif
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace Z4c {
@@ -32,9 +34,131 @@ using namespace Arith;
 using namespace Loop;
 using namespace std;
 
+constexpr int max_eta_punctures = 10;
+
+struct PunctureEtaProfile {
+  bool enabled = false;
+  bool radial_baseline = false;
+  CCTK_INT num_punctures = 0;
+  CCTK_REAL x[max_eta_punctures] = {};
+  CCTK_REAL y[max_eta_punctures] = {};
+  CCTK_REAL z[max_eta_punctures] = {};
+  CCTK_REAL eta[max_eta_punctures] = {};
+  CCTK_REAL width[max_eta_punctures] = {};
+  CCTK_REAL outer = 0.0;
+  CCTK_REAL eta_min = 0.0;
+  CCTK_REAL eta_max = 0.0;
+};
+
+ARITH_DEVICE ARITH_INLINE CCTK_REAL clamp_eta(const CCTK_REAL eta_value,
+                                              const CCTK_REAL eta_min,
+                                              const CCTK_REAL eta_max) {
+  return eta_value < eta_min ? eta_min
+                             : (eta_value > eta_max ? eta_max : eta_value);
+}
+
+ARITH_DEVICE ARITH_INLINE CCTK_REAL radial_eta(
+    const CCTK_REAL x, const CCTK_REAL y, const CCTK_REAL z,
+    const CCTK_REAL veta_width, const CCTK_REAL veta_central,
+    const CCTK_REAL veta_outer) {
+  const CCTK_REAL r2 = x * x + y * y + z * z;
+  const CCTK_REAL r4 = r2 * r2;
+  const CCTK_REAL w4 =
+      veta_width * veta_width * veta_width * veta_width;
+  return (veta_central - veta_outer) * exp(-r4 / w4) + veta_outer;
+}
+
+ARITH_DEVICE ARITH_INLINE CCTK_REAL
+puncture_tracker_eta(const PunctureEtaProfile &profile, const CCTK_REAL x,
+                     const CCTK_REAL y, const CCTK_REAL z,
+                     const CCTK_REAL fallback_eta) {
+  if (!profile.enabled)
+    return fallback_eta;
+
+  const CCTK_REAL baseline =
+      profile.radial_baseline ? fallback_eta : profile.outer;
+
+  CCTK_REAL weight_sum = 0.0;
+  CCTK_REAL eta_weighted = 0.0;
+  for (int n = 0; n < max_eta_punctures; ++n) {
+    if (n >= profile.num_punctures)
+      break;
+
+    const CCTK_REAL dx = x - profile.x[n];
+    const CCTK_REAL dy = y - profile.y[n];
+    const CCTK_REAL dz = z - profile.z[n];
+    const CCTK_REAL r2 = dx * dx + dy * dy + dz * dz;
+    const CCTK_REAL r4 = r2 * r2;
+    const CCTK_REAL w = profile.width[n];
+    const CCTK_REAL w4 = w * w * w * w;
+    const CCTK_REAL weight = exp(-r4 / w4);
+
+    weight_sum += weight;
+    eta_weighted += weight * profile.eta[n];
+  }
+
+  if (weight_sum <= 0.0)
+    return clamp_eta(baseline, profile.eta_min, profile.eta_max);
+
+  const CCTK_REAL eta_near = eta_weighted / weight_sum;
+  const CCTK_REAL blend = weight_sum < 1.0 ? weight_sum : 1.0;
+  const CCTK_REAL eta_value =
+      baseline + blend * (eta_near - baseline);
+  return clamp_eta(eta_value, profile.eta_min, profile.eta_max);
+}
+
 extern "C" void Z4c_RHS(CCTK_ARGUMENTS) {
   DECLARE_CCTK_ARGUMENTS_Z4c_RHS;
   DECLARE_CCTK_PARAMETERS;
+
+  PunctureEtaProfile eta_profile_data;
+  eta_profile_data.enabled =
+      CCTK_EQUALS(eta_profile, "puncture_tracker") ||
+      CCTK_EQUALS(eta_profile, "radial_puncture_tracker");
+  eta_profile_data.radial_baseline =
+      CCTK_EQUALS(eta_profile, "radial_puncture_tracker");
+  eta_profile_data.num_punctures = eta_num_punctures;
+  eta_profile_data.outer = veta_outer;
+  eta_profile_data.eta_min = eta_profile_min;
+  eta_profile_data.eta_max = eta_profile_max;
+
+  if (eta_profile_data.eta_min > eta_profile_data.eta_max)
+    CCTK_VERROR("eta_profile_min=%g is larger than eta_profile_max=%g",
+                double(eta_profile_data.eta_min),
+                double(eta_profile_data.eta_max));
+
+  if (eta_profile_data.enabled) {
+    if (eta_profile_data.num_punctures <= 0)
+      CCTK_ERROR("PunctureTracker eta profiles require "
+                 "eta_num_punctures > 0");
+
+    const auto pt_loc_x_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_loc_x"));
+    const auto pt_loc_y_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_loc_y"));
+    const auto pt_loc_z_ptr = static_cast<const CCTK_REAL *>(
+        CCTK_VarDataPtr(cctkGH, 0, "PunctureTracker::pt_loc_z"));
+
+    if (!pt_loc_x_ptr || !pt_loc_y_ptr || !pt_loc_z_ptr)
+      CCTK_ERROR("PunctureTracker eta profiles require active "
+                 "PunctureTracker::pt_loc_x/y/z scalars");
+
+    for (int n = 0; n < eta_profile_data.num_punctures; ++n) {
+      eta_profile_data.x[n] = pt_loc_x_ptr[n];
+      eta_profile_data.y[n] = pt_loc_y_ptr[n];
+      eta_profile_data.z[n] = pt_loc_z_ptr[n];
+      eta_profile_data.eta[n] = eta_puncture[n];
+      eta_profile_data.width[n] = eta_puncture_width[n];
+
+      if (!isfinite(eta_profile_data.x[n]) ||
+          !isfinite(eta_profile_data.y[n]) ||
+          !isfinite(eta_profile_data.z[n]))
+        CCTK_VERROR("PunctureTracker location %d is not finite: (%g,%g,%g)",
+                    n, double(eta_profile_data.x[n]),
+                    double(eta_profile_data.y[n]),
+                    double(eta_profile_data.z[n]));
+    }
+  }
 
   for (int d = 0; d < 3; ++d)
     if (cctk_nghostzones[d] < deriv_order / 2 + 1)
@@ -224,13 +348,10 @@ extern "C" void Z4c_RHS(CCTK_ARGUMENTS) {
           const GF3D2index index1(layout1, p.I);
           const GF3D5index index0(layout0, p.I);
 
-          // Taper eta to zero at the outer boundary to ensure stability
-          const CCTK_REAL r2 = p.x * p.x + p.y * p.y + p.z * p.z;
-          const CCTK_REAL r4 = r2 * r2;
-          const CCTK_REAL is4 =
-              1.0 / (veta_width * veta_width * veta_width * veta_width);
           const CCTK_REAL eta_local =
-              (veta_central - veta_outer) * exp(-r4 * is4) + veta_outer;
+              puncture_tracker_eta(eta_profile_data, p.x, p.y, p.z,
+                                   radial_eta(p.x, p.y, p.z, veta_width,
+                                              veta_central, veta_outer));
 
           // Load and calculate
           const z4c_vars<vreal> vars(
