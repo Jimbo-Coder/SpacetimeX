@@ -118,30 +118,16 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn, have_points)
   call CCTK_VarIndex (ind_betax, "ADMBaseX::betax" )
   call CCTK_VarIndex (ind_betay, "ADMBaseX::betay" )
   call CCTK_VarIndex (ind_betaz, "ADMBaseX::betaz" )
-  !! if (stress_energy_state /= 0) then
-  if (1 == 1) then
-     call CCTK_VarIndex (ind_ttt  , "TmunuBaseX::eTtt")
-     call CCTK_VarIndex (ind_ttx  , "TmunuBaseX::eTtx")
-     call CCTK_VarIndex (ind_tty  , "TmunuBaseX::eTty")
-     call CCTK_VarIndex (ind_ttz  , "TmunuBaseX::eTtz")
-     call CCTK_VarIndex (ind_txx  , "TmunuBaseX::eTxx")
-     call CCTK_VarIndex (ind_txy  , "TmunuBaseX::eTxy")
-     call CCTK_VarIndex (ind_txz  , "TmunuBaseX::eTxz")
-     call CCTK_VarIndex (ind_tyy  , "TmunuBaseX::eTyy")
-     call CCTK_VarIndex (ind_tyz  , "TmunuBaseX::eTyz")
-     call CCTK_VarIndex (ind_tzz  , "TmunuBaseX::eTzz")
-  else
-     ind_ttt = -1
-     ind_ttx = -1
-     ind_tty = -1
-     ind_ttz = -1
-     ind_txx = -1
-     ind_txy = -1
-     ind_txz = -1
-     ind_tyy = -1
-     ind_tyz = -1
-     ind_tzz = -1
-  end if
+  call CCTK_VarIndex (ind_ttt  , "TmunuBaseX::eTtt")
+  call CCTK_VarIndex (ind_ttx  , "TmunuBaseX::eTtx")
+  call CCTK_VarIndex (ind_tty  , "TmunuBaseX::eTty")
+  call CCTK_VarIndex (ind_ttz  , "TmunuBaseX::eTtz")
+  call CCTK_VarIndex (ind_txx  , "TmunuBaseX::eTxx")
+  call CCTK_VarIndex (ind_txy  , "TmunuBaseX::eTxy")
+  call CCTK_VarIndex (ind_txz  , "TmunuBaseX::eTxz")
+  call CCTK_VarIndex (ind_tyy  , "TmunuBaseX::eTyy")
+  call CCTK_VarIndex (ind_tyz  , "TmunuBaseX::eTyz")
+  call CCTK_VarIndex (ind_tzz  , "TmunuBaseX::eTzz")
   
   
   
@@ -434,30 +420,16 @@ subroutine qlm_interpolate (CCTK_ARGUMENTS, hn, have_points)
      call unpack (qlm_betax  , ni, nj)
      call unpack (qlm_betay  , ni, nj)
      call unpack (qlm_betaz  , ni, nj)
-     !! if (stress_energy_state /= 0) then
-     if (1 == 1) then
-        call unpack (qlm_ttt    , ni, nj)
-        call unpack (qlm_ttx    , ni, nj)
-        call unpack (qlm_tty    , ni, nj)
-        call unpack (qlm_ttz    , ni, nj)
-        call unpack (qlm_txx    , ni, nj)
-        call unpack (qlm_txy    , ni, nj)
-        call unpack (qlm_txz    , ni, nj)
-        call unpack (qlm_tyy    , ni, nj)
-        call unpack (qlm_tyz    , ni, nj)
-        call unpack (qlm_tzz    , ni, nj)
-     else
-        qlm_ttt = 0
-        qlm_ttx = 0
-        qlm_tty = 0
-        qlm_ttz = 0
-        qlm_txx = 0
-        qlm_txy = 0
-        qlm_txz = 0
-        qlm_tyy = 0
-        qlm_tyz = 0
-        qlm_tzz = 0
-     end if
+     call unpack (qlm_ttt    , ni, nj)
+     call unpack (qlm_ttx    , ni, nj)
+     call unpack (qlm_tty    , ni, nj)
+     call unpack (qlm_ttz    , ni, nj)
+     call unpack (qlm_txx    , ni, nj)
+     call unpack (qlm_txy    , ni, nj)
+     call unpack (qlm_txz    , ni, nj)
+     call unpack (qlm_tyy    , ni, nj)
+     call unpack (qlm_tyz    , ni, nj)
+     call unpack (qlm_tzz    , ni, nj)
      
      
      
