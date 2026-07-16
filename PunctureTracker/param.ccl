@@ -27,6 +27,25 @@ REAL initial_z[10] "Initial z coordinate positions of punctures"
   *:* :: ""
 } 0.0
 
+REAL puncture_mass[10] "Mass associated with each tracked puncture"
+{
+  (0:* :: "mass must be positive"
+} 1.0
+
+REAL puncture_eta_weight[10] "Weight associated with each tracked puncture for position-dependent eta profiles"
+{
+  0:* :: "weight must be non-negative"
+} 0.25
+
+BOOLEAN track_mergers "Group nearby tracked punctures into effective sources"
+{
+} "yes"
+
+REAL merger_distance_coefficient "Two tracked punctures are grouped when their separation is below this coefficient times the sum of their masses"
+{
+  0:* :: "non-negative coefficient"
+} 0.5
+
 INT interp_order "Shift interpolation order"
 {
   0:* :: ""

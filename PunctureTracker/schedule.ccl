@@ -1,6 +1,12 @@
 # Schedule definitions for thorn PunctureTracker
 STORAGE: pt_loc
 STORAGE: pt_vel
+STORAGE: pt_properties
+STORAGE: pt_count
+STORAGE: pt_group_count
+STORAGE: pt_membership
+STORAGE: pt_group_loc
+STORAGE: pt_group_properties
 STORAGE: BoxInBox::positions
 
 SCHEDULE PunctureTracker_Init AT initial
@@ -9,6 +15,12 @@ SCHEDULE PunctureTracker_Init AT initial
   OPTIONS: GLOBAL
   WRITES: pt_loc
   WRITES: pt_vel
+  WRITES: pt_properties
+  WRITES: pt_count
+  WRITES: pt_group_count
+  WRITES: pt_membership
+  WRITES: pt_group_loc
+  WRITES: pt_group_properties
 } "Read initial location of punctures from parameter file"
 
 SCHEDULE GROUP PunctureTracker_SetupGroup AT initial AFTER PunctureTracker_Init
@@ -26,7 +38,13 @@ SCHEDULE PunctureTracker_Setup IN PunctureTracker_SetupGroup
   OPTIONS: GLOBAL
   READS: pt_loc
   READS: pt_vel
+  READS: pt_properties
   WRITES: BoxInBox::positions
+  WRITES: pt_count
+  WRITES: pt_group_count
+  WRITES: pt_membership
+  WRITES: pt_group_loc
+  WRITES: pt_group_properties
 } "Calculate initial location of punctures"
 
 SCHEDULE PunctureTracker_Track AT evol AFTER ODESolvers_Solve
@@ -36,7 +54,13 @@ SCHEDULE PunctureTracker_Track AT evol AFTER ODESolvers_Solve
   READS: ADMBaseX::shift(everywhere)
   WRITES: pt_loc
   WRITES: pt_vel
+  WRITES: pt_properties
   WRITES: BoxInBox::positions
+  WRITES: pt_count
+  WRITES: pt_group_count
+  WRITES: pt_membership
+  WRITES: pt_group_loc
+  WRITES: pt_group_properties
 } "Calculate new location of punctures"
 
 SCHEDULE PunctureTracker_Finalize AT terminate BEFORE driver_terminate

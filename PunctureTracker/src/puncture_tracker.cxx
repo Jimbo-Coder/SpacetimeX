@@ -68,6 +68,8 @@ extern "C" void PunctureTracker_Init(CCTK_ARGUMENTS) {
     CCTK_INFO("Initializing PunctureTracker");
   }
 
+  pt_num_tracked[0] = 0;
+  pt_num_groups[0] = 0;
   for (int n = 0; n < max_num_tracked; ++n) {
     if (track[n]) {
       pt_loc_t[n] = cctk_time;
@@ -78,6 +80,9 @@ extern "C" void PunctureTracker_Init(CCTK_ARGUMENTS) {
       pt_vel_x[n] = 0.0;
       pt_vel_y[n] = 0.0;
       pt_vel_z[n] = 0.0;
+      pt_mass[n] = puncture_mass[n];
+      pt_eta_weight[n] = puncture_eta_weight[n];
+      ++pt_num_tracked[0];
     } else {
       pt_loc_t[n] = 0.0;
       pt_loc_x[n] = 0.0;
@@ -87,7 +92,16 @@ extern "C" void PunctureTracker_Init(CCTK_ARGUMENTS) {
       pt_vel_x[n] = 0.0;
       pt_vel_y[n] = 0.0;
       pt_vel_z[n] = 0.0;
+      pt_mass[n] = 0.0;
+      pt_eta_weight[n] = 0.0;
     }
+    pt_group_membership[n] = -1;
+    pt_group_t[n] = 0.0;
+    pt_group_x[n] = 0.0;
+    pt_group_y[n] = 0.0;
+    pt_group_z[n] = 0.0;
+    pt_group_mass[n] = 0.0;
+    pt_group_eta_weight[n] = 0.0;
   }
 }
 
@@ -108,6 +122,8 @@ extern "C" void PunctureTracker_Setup(CCTK_ARGUMENTS) {
         g_punctures->getVelocity()[0].push_back(pt_vel_x[n]);
         g_punctures->getVelocity()[1].push_back(pt_vel_y[n]);
         g_punctures->getVelocity()[2].push_back(pt_vel_z[n]);
+        g_punctures->getMass().push_back(pt_mass[n]);
+        g_punctures->getEtaWeight().push_back(pt_eta_weight[n]);
       }
     }
   }
@@ -130,6 +146,30 @@ extern "C" void PunctureTracker_Setup(CCTK_ARGUMENTS) {
 
   g_punctures->setNumPunctures();
   assert(g_punctures->getNumPunctures() == nPunctures);
+  g_punctures->updateGroups(track_mergers, merger_distance_coefficient);
+
+  pt_num_tracked[0] = nPunctures;
+  pt_num_groups[0] = CCTK_INT(g_punctures->getGroupMass().size());
+  for (int n = 0; n < max_num_tracked; ++n) {
+    pt_group_membership[n] = -1;
+    pt_group_t[n] = 0.0;
+    pt_group_x[n] = 0.0;
+    pt_group_y[n] = 0.0;
+    pt_group_z[n] = 0.0;
+    pt_group_mass[n] = 0.0;
+    pt_group_eta_weight[n] = 0.0;
+  }
+  for (int n = 0; n < nPunctures; ++n) {
+    pt_group_membership[n] = g_punctures->getGroupMembership()[n];
+  }
+  for (int n = 0; n < pt_num_groups[0]; ++n) {
+    pt_group_t[n] = cctk_time;
+    pt_group_x[n] = g_punctures->getGroupLocation()[0][n];
+    pt_group_y[n] = g_punctures->getGroupLocation()[1][n];
+    pt_group_z[n] = g_punctures->getGroupLocation()[2][n];
+    pt_group_mass[n] = g_punctures->getGroupMass()[n];
+    pt_group_eta_weight[n] = g_punctures->getGroupEtaWeight()[n];
+  }
 
   // enabled if refinement regions should follow the punctures
   if (track_boxes) {
@@ -235,8 +275,20 @@ extern "C" void PunctureTracker_Track(CCTK_ARGUMENTS) {
 
   // Broadcast result: 3 components for location, 3 components for velocity
   g_punctures->broadcast(CCTK_PASS_CTOC);
+  g_punctures->updateGroups(track_mergers, merger_distance_coefficient);
 
   // Write to pt_loc_foo and pt_vel_foo
+  pt_num_tracked[0] = nPunctures;
+  pt_num_groups[0] = CCTK_INT(g_punctures->getGroupMass().size());
+  for (int i = 0; i < max_num_tracked; ++i) {
+    pt_group_membership[i] = -1;
+    pt_group_t[i] = 0.0;
+    pt_group_x[i] = 0.0;
+    pt_group_y[i] = 0.0;
+    pt_group_z[i] = 0.0;
+    pt_group_mass[i] = 0.0;
+    pt_group_eta_weight[i] = 0.0;
+  }
   for (int i = 0; i < nPunctures; ++i) {
     pt_loc_t[i] = time[i];
     pt_loc_x[i] = location[0][i];
@@ -246,6 +298,17 @@ extern "C" void PunctureTracker_Track(CCTK_ARGUMENTS) {
     pt_vel_x[i] = velocity[0][i];
     pt_vel_y[i] = velocity[1][i];
     pt_vel_z[i] = velocity[2][i];
+    pt_mass[i] = g_punctures->getMass()[i];
+    pt_eta_weight[i] = g_punctures->getEtaWeight()[i];
+    pt_group_membership[i] = g_punctures->getGroupMembership()[i];
+  }
+  for (int i = 0; i < pt_num_groups[0]; ++i) {
+    pt_group_t[i] = cctk_time;
+    pt_group_x[i] = g_punctures->getGroupLocation()[0][i];
+    pt_group_y[i] = g_punctures->getGroupLocation()[1][i];
+    pt_group_z[i] = g_punctures->getGroupLocation()[2][i];
+    pt_group_mass[i] = g_punctures->getGroupMass()[i];
+    pt_group_eta_weight[i] = g_punctures->getGroupEtaWeight()[i];
   }
 
   if (track_boxes) {

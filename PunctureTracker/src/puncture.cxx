@@ -6,7 +6,26 @@
 #include <cctk_Parameters.h>
 #include <util_Table.h>
 
+#include <cmath>
+#include <vector>
+
 namespace PunctureTracker {
+
+static int findRoot(std::vector<int> &parent, int n) {
+  while (parent[n] != n) {
+    parent[n] = parent[parent[n]];
+    n = parent[n];
+  }
+  return n;
+}
+
+static void joinRoots(std::vector<int> &parent, const int a, const int b) {
+  const int rootA = findRoot(parent, a);
+  const int rootB = findRoot(parent, b);
+  if (rootA != rootB) {
+    parent[rootB] = rootA;
+  }
+}
 
 void PunctureContainer::updatePreviousTime(CCTK_ARGUMENTS) {
   DECLARE_CCTK_ARGUMENTS;
@@ -128,6 +147,78 @@ void PunctureContainer::broadcast(CCTK_ARGUMENTS) {
       location_[i][n] = buffer[i * numPunctures_ + n];
       velocity_[i][n] = buffer[(i + Loop::dim) * numPunctures_ + n];
     }
+  }
+}
+
+void PunctureContainer::updateGroups(
+    const bool trackMergers, const CCTK_REAL mergerDistanceCoefficient) {
+  groupLocation_[0].clear();
+  groupLocation_[1].clear();
+  groupLocation_[2].clear();
+  groupMass_.clear();
+  groupEtaWeight_.clear();
+  groupMembership_.assign(numPunctures_, -1);
+
+  if (numPunctures_ <= 0) {
+    return;
+  }
+
+  std::vector<int> parent(numPunctures_);
+  for (int n = 0; n < numPunctures_; ++n) {
+    parent[n] = n;
+  }
+
+  if (trackMergers) {
+    for (int i = 0; i < numPunctures_; ++i) {
+      for (int j = i + 1; j < numPunctures_; ++j) {
+        CCTK_REAL distance2 = 0.0;
+        for (int d = 0; d < Loop::dim; ++d) {
+          const CCTK_REAL dx = location_[d][i] - location_[d][j];
+          distance2 += dx * dx;
+        }
+        const CCTK_REAL distance = std::sqrt(distance2);
+        const CCTK_REAL mergerDistance =
+            mergerDistanceCoefficient * (mass_[i] + mass_[j]);
+        if (distance < mergerDistance) {
+          joinRoots(parent, i, j);
+        }
+      }
+    }
+  }
+
+  std::vector<int> groupRoot;
+  for (int n = 0; n < numPunctures_; ++n) {
+    const int root = findRoot(parent, n);
+    int group = -1;
+    for (int g = 0; g < int(groupRoot.size()); ++g) {
+      if (groupRoot[g] == root) {
+        group = g;
+        break;
+      }
+    }
+
+    if (group < 0) {
+      group = int(groupRoot.size());
+      groupRoot.push_back(root);
+      for (int d = 0; d < Loop::dim; ++d) {
+        groupLocation_[d].push_back(0.0);
+      }
+      groupMass_.push_back(0.0);
+      groupEtaWeight_.push_back(0.0);
+    }
+
+    const CCTK_REAL oldMass = groupMass_[group];
+    const CCTK_REAL newMass = oldMass + mass_[n];
+    for (int d = 0; d < Loop::dim; ++d) {
+      groupLocation_[d][group] =
+          (groupLocation_[d][group] * oldMass + location_[d][n] * mass_[n]) /
+          newMass;
+    }
+    groupEtaWeight_[group] =
+        (groupEtaWeight_[group] * oldMass + etaWeight_[n] * mass_[n]) /
+        newMass;
+    groupMass_[group] = newMass;
+    groupMembership_[n] = group;
   }
 }
 
