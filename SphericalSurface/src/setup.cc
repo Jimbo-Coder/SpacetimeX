@@ -340,7 +340,13 @@ extern "C" void SphericalSurface_SetupRes (CCTK_ARGUMENTS)
     // set resolution according to Radius and Cartesian resolution
 
     if (!auto_res[n])
-        continue;
+    {
+      sf_delta_theta_estimate[n] = 0.0;
+      sf_delta_phi_estimate[n] = 0.0;
+      sf_minreflevel[n] = 0.0;
+      sf_maxreflevel[n] = 0.0;
+      continue;
+    }
       
     CCTK_REAL my_radius;
       

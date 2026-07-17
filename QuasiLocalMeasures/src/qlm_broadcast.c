@@ -140,7 +140,9 @@ CCTK_FNAME(qlm_broadcast) (CCTK_POINTER_TO_CONST * restrict const cctkGH_)
   int hn; 
   for (hn = 0; hn < num_surfaces; ++ hn)
   {
-    int const root = hn % num_procs;
+    int root = hn % num_procs;
+    if (CCTK_Equals(interpolator, "CarpetX"))
+      root = 0;
     
     bcast (cctkGH, "QuasiLocalMeasures::qlm_state"      , hn, root);
     bcast (cctkGH, "QuasiLocalMeasures::qlm_state_p"    , hn, root);
