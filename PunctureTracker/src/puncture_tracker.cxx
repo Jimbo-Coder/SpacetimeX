@@ -18,7 +18,7 @@ static PunctureContainer *g_punctures = nullptr;
 
 static int previous_iteration = 0;
 
-const int max_num_tracked = 10;
+constexpr int max_num_tracked = 100;
 
 static int getCarpetXFinestLevel() {
   int type = 0;
