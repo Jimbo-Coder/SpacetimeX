@@ -243,7 +243,7 @@ already_ran = true;
 // check parameters
 //
 int need_zones = 0;
-for (int n=1; n<N_horizons; ++n) {
+for (int n=1; n<=N_horizons; ++n) {
   need_zones = jtutil::max(need_zones, int(N_zones_per_right_angle[n]));
 }
 if (need_zones > max_N_zones_per_right_angle) {
@@ -253,7 +253,7 @@ if (need_zones > max_N_zones_per_right_angle) {
               "Set max_N_zones_per_right_angle to %d or higher to continue.",
               need_zones);      /*NOTREACHED*/
  }
-for (int n=1; n<N_horizons; ++n) {
+for (int n=1; n<=N_horizons; ++n) {
   if (depends_on[n] != 0) {
     assert (depends_on[n] >= 1 && depends_on[n] < n);
     if (N_zones_per_right_angle[n] != N_zones_per_right_angle[depends_on[n]]) {
@@ -267,7 +267,7 @@ for (int n=1; n<N_horizons; ++n) {
 }
 
 bool find_individual_is_set = false;
-for (int n = 1 ; n < N_horizons ; ++n)
+for (int n = 1 ; n <= N_horizons ; ++n)
 {
 if (find_every_individual[n] > 0)
    then find_individual_is_set = true;
@@ -317,6 +317,8 @@ state.my_proc = CCTK_MyProc(cctkGH);
 
 state.N_horizons = N_horizons;
 state.N_active_procs = 0;	// dummy value, will be set properly later
+state.dynamic_horizon_assignment
+   = CCTK_Equals(parallel_horizon_assignment, "dynamic");
 CCTK_VInfo(CCTK_THORNSTRING,
            "           to search for %d horizon%s on %d processor%s",
 	   state.N_horizons, ((state.N_horizons == 1) ? "" : "s"),
@@ -612,20 +614,24 @@ if (strlen(surface_interpolator_name) > 0)
 			   surface_interpolator_pars);		/*NOTREACHED*/
 	}
 
-// setup all horizons on this processor,
-// with full-fledged patch systems for genuine horizons
-// and skeletal patch systems for others
+// Set up all horizons on this processor.  Dynamic assignment requires
+// replicated full state so that any process can take ownership of any
+// dependency-ready horizon without rebuilding or transferring a Jacobian.
 	  {
 	for (int hn = 1 ; hn <= hs.N_horizons() ; ++hn)
 	{
 	const bool genuine_flag = hs.is_hn_genuine(hn);
+	const bool full_flag
+	   = genuine_flag
+	     || (state.dynamic_horizon_assignment
+		 && state.my_proc < state.N_active_procs);
 	state.AH_data_array[hn] = new AH_data;
 	struct AH_data& AH_data = *state.AH_data_array[hn];
 
 	if (verbose_info.print_algorithm_highlights)
 	   then CCTK_VInfo(CCTK_THORNSTRING,
 			   "   setting up %s data structures for horizon %d",
-			   (genuine_flag ? "full-fledged" : "skeletal"),
+			   (full_flag ? "full-fledged" : "skeletal"),
 			   hn);
 
 	// decide what type of patch system this one should be
@@ -652,20 +658,20 @@ if (strlen(surface_interpolator_name) > 0)
 			      ghost_zone_width, patch_overlap_width,
 			      N_zones_per_right_angle[hn],
 			      gfns::nominal_min_gfn,
-			      (genuine_flag ? gfns::nominal_max_gfn
-					    : gfns::skeletal_nominal_max_gfn),
+			      (full_flag ? gfns::nominal_max_gfn
+					 : gfns::skeletal_nominal_max_gfn),
 			      gfns::ghosted_min_gfn, gfns::ghosted_max_gfn,
 			      ip_interp_handle, ip_interp_param_table_handle,
 			      surface_interp_handle,
 			      surface_interp_param_table_handle,
 			      true, verbose_info.print_algorithm_details);
 	patch_system& ps = *AH_data.ps_ptr;
-	if (genuine_flag)
+	if (full_flag)
 	   then ps.set_gridfn_to_constant(0.0, gfns::gfn__zero);
-	if (genuine_flag)
+	if (full_flag)
 	   then ps.set_gridfn_to_constant(1.0, gfns::gfn__one);
 
-	AH_data.Jac_ptr = genuine_flag
+	AH_data.Jac_ptr = full_flag
 			  ? new_Jacobian(Jac_info.Jacobian_store_solve_method,
 					 ps,
 					 verbose_info.print_algorithm_details)
@@ -733,7 +739,7 @@ if (strlen(surface_interpolator_name) > 0)
 	AH_data.initial_find_flag = true;
 	AH_data.really_initial_find_flag = AH_data.initial_find_flag;
 
-	if (genuine_flag)
+	if (full_flag)
 	   then {
 		if (verbose_info.print_algorithm_details)
 		   then CCTK_VInfo(CCTK_THORNSTRING,
