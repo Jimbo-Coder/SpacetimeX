@@ -279,6 +279,10 @@ struct	horizon_buffers
 //
 struct	AH_data
 	{
+	// In dynamic mode the first search learns a balanced owner.  Keeping that
+	// owner on later calls preserves rank-local Newton and surface state.
+	int dynamic_owner_proc;
+
 	//
 	// Any given horizon is allocated to a single processor.
 	// On that processor (where we actually find the horizon)

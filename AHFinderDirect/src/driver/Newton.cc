@@ -103,6 +103,40 @@ private:
 	std::vector<int> owners_;
 	std::vector<int> horizons_;
 
+	int ready_horizon_for_proc(int proc, bool retain_owner) const
+	{
+	for (int hn = 1 ; hn <= N_horizons_ ; ++hn)
+	  {
+	  if (task_states_[hn] != task_pending || !dependency_is_ready(hn))
+	     then continue;
+	  const int owner = AH_data_array_[hn]->dynamic_owner_proc;
+	  if ((retain_owner && owner == proc)
+	      || (!retain_owner && owner < 0))
+	     then return hn;
+	  }
+	return 0;
+	}
+
+	void assign_horizon(int proc, int hn, bool print_assignments)
+	{
+	assert( proc >= 0 && proc < N_active_procs_ );
+	assert( hn > 0 && hn <= N_horizons_ );
+	assert( horizons_[proc] == 0 );
+	assert( task_states_[hn] == task_pending );
+	task_states_[hn] = task_running;
+	owners_[hn] = proc;
+	horizons_[proc] = hn;
+	const bool learning_owner = AH_data_array_[hn]->dynamic_owner_proc < 0;
+	if (learning_owner)
+	   then AH_data_array_[hn]->dynamic_owner_proc = proc;
+	if (print_assignments)
+	   then CCTK_VInfo(CCTK_THORNSTRING,
+		   "   dynamically assigning horizon %d to processor #%d%s",
+			   hn, proc,
+			   (learning_owner
+			    ? " (learning owner)" : " (retained owner)"));
+	}
+
 	bool dependency_is_ready(int hn) const
 	{
 	const int dependency = AH_data_array_[hn]->depends_on;
@@ -148,19 +182,11 @@ private:
 	  {
 	  if (horizons_[proc] != 0)
 	     then continue;
-	  for (int hn = 1 ; hn <= N_horizons_ ; ++hn)
-	    {
-	    if (task_states_[hn] != task_pending || !dependency_is_ready(hn))
-	       then continue;
-	    task_states_[hn] = task_running;
-	    owners_[hn] = proc;
-	    horizons_[proc] = hn;
-	    if (print_assignments)
-	       then CCTK_VInfo(CCTK_THORNSTRING,
-		       "   dynamically assigning horizon %d to processor #%d",
-			       hn, proc);
-	    break;
-	    }
+	  int hn = ready_horizon_for_proc(proc, true);
+	  if (hn == 0)
+	     then hn = ready_horizon_for_proc(proc, false);
+	  if (hn > 0)
+	     then assign_horizon(proc, hn, print_assignments);
 	  }
 	}
 
@@ -176,8 +202,12 @@ public:
 		  horizons_(N_active_procs, 0)
 	{
 	for (int hn = 1 ; hn <= N_horizons_ ; ++hn)
+	  {
+	  if (AH_data_array_[hn]->dynamic_owner_proc >= N_active_procs_)
+	     then AH_data_array_[hn]->dynamic_owner_proc = -1;
 	  if (AH_data_array_[hn]->search_flag)
 	     then task_states_[hn] = task_pending;
+	  }
 	assign_ready_horizons(print_assignments);
 	}
 

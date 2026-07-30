@@ -146,7 +146,7 @@ keyword parallel_horizon_assignment \
   "how should independent horizon searches be assigned to MPI processes?"
 {
 "static"  :: "use the original fixed round-robin assignment"
-"dynamic" :: "assign the next dependency-ready horizon when a process becomes idle"
+"dynamic" :: "learn balanced process queues from the first dependency-ready searches"
 } "static"
 
 #

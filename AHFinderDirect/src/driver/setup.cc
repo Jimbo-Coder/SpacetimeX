@@ -747,6 +747,7 @@ if (strlen(surface_interpolator_name) > 0)
 		set_initial_guess_parameters(AH_data, hn, /* irrelevant here; leave at zero */0, 0, 0);
 		}
 
+	AH_data.dynamic_owner_proc = -1;
 	AH_data.search_flag = false;
 	AH_data.found_flag = false;
 	AH_data.h_files_written = false;
