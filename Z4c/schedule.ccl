@@ -42,6 +42,16 @@ SCHEDULE GROUP Z4c_InitialGroup AT postrestrictinitial
 {
 } "Rebuild Z4c variables from final hierarchy-wide ADM initial data"
 
+SCHEDULE GROUP Z4c_PostStepGroup AT postrestrictinitial
+  AFTER Z4c_InitialGroup
+{
+} "Synchronize and enforce final hierarchy-wide Z4c initial data"
+
+SCHEDULE GROUP Z4c_AnalysisGroup AT postrestrictinitial
+  AFTER Z4c_PostStepGroup
+{
+} "Recompute diagnostics from final hierarchy-wide Z4c initial data"
+
 SCHEDULE GROUP Z4c_PostStepGroup AT initial AFTER Z4c_InitialGroup BEFORE ADMBaseX_SetADMVars
 {
 } "Post-process Z4c variables"
