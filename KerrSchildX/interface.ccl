@@ -3,3 +3,7 @@
 IMPLEMENTS: KerrSchildX
 
 INHERITS: ADMBaseX CoordinatesX
+
+USES INCLUDE HEADER: defs.hxx
+USES INCLUDE HEADER: dual.hxx
+USES INCLUDE HEADER: loop_device.hxx
