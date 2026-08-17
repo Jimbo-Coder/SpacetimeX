@@ -3,6 +3,7 @@
 #include <cctk_Parameters.h>
 #include <loop_device.hxx>
 
+#include <array>
 #include <cmath>
 
 #include <cx_powerinline.hxx>
@@ -19,9 +20,9 @@ extern "C" void Z4cowGPU_Enforce(CCTK_ARGUMENTS) {
   const GF3D2layout layout2(cctkGH, {0, 0, 0});
 
   // Output grid functions
-  const array<CCTK_REAL *, 6> gf_gamt{gammatxx, gammatxy, gammatxz,
+  const std::array<CCTK_REAL *, 6> gf_gamt{gammatxx, gammatxy, gammatxz,
                                       gammatyy, gammatyz, gammatzz};
-  const array<CCTK_REAL *, 6> gf_exAt{Atxx, Atxy, Atxz, Atyy, Atyz, Atzz};
+  const std::array<CCTK_REAL *, 6> gf_exAt{Atxx, Atxy, Atxz, Atyy, Atyz, Atzz};
   CCTK_REAL *gf_alpha = alphaG;
 
   // Parameters

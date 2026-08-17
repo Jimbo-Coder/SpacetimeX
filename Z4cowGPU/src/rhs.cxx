@@ -4,6 +4,7 @@
 #include <loop_device.hxx>
 #include <cx_utils.hxx>
 
+#include <array>
 #include <cmath>
 
 #include <cx_derivsGF3D5.hxx>
@@ -24,7 +25,7 @@ extern "C" void Z4cowGPU_RHS(CCTK_ARGUMENTS) {
     if (cctk_nghostzones[d] < deriv_order / 2)
       CCTK_VERROR("Need at least %d ghost zones", deriv_order / 2);
 
-  const array<CCTK_REAL, 3> invDxyz{1. / CCTK_DELTA_SPACE(0),
+  const std::array<CCTK_REAL, 3> invDxyz{1. / CCTK_DELTA_SPACE(0),
                                     1. / CCTK_DELTA_SPACE(1),
                                     1. / CCTK_DELTA_SPACE(2)};
 
@@ -32,32 +33,32 @@ extern "C" void Z4cowGPU_RHS(CCTK_ARGUMENTS) {
 
   // Input grid functions
   const CCTK_REAL *gf_W = W;
-  const array<const CCTK_REAL *, 6> gf_gamt{gammatxx, gammatxy, gammatxz,
+  const std::array<const CCTK_REAL *, 6> gf_gamt{gammatxx, gammatxy, gammatxz,
                                             gammatyy, gammatyz, gammatzz};
   const CCTK_REAL *gf_exKh = Kh;
-  const array<const CCTK_REAL *, 6> gf_exAt{Atxx, Atxy, Atxz, Atyy, Atyz, Atzz};
-  const array<const CCTK_REAL *, 3> gf_trGt{Gamtx, Gamty, Gamtz};
+  const std::array<const CCTK_REAL *, 6> gf_exAt{Atxx, Atxy, Atxz, Atyy, Atyz, Atzz};
+  const std::array<const CCTK_REAL *, 3> gf_trGt{Gamtx, Gamty, Gamtz};
   const CCTK_REAL *gf_Theta = Theta;
   const CCTK_REAL *gf_alpha = alphaG;
-  const array<const CCTK_REAL *, 3> gf_beta{betaGx, betaGy, betaGz};
+  const std::array<const CCTK_REAL *, 3> gf_beta{betaGx, betaGy, betaGz};
 
   // More input grid functions
   // const CCTK_REAL *gf_eTtt = eTtt;
-  const array<const CCTK_REAL *, 3> gf_eTt{eTtx, eTty, eTtz};
-  const array<const CCTK_REAL *, 6> gf_eT{eTxx, eTxy, eTxz, eTyy, eTyz, eTzz};
+  const std::array<const CCTK_REAL *, 3> gf_eTt{eTtx, eTty, eTtz};
+  const std::array<const CCTK_REAL *, 6> gf_eT{eTxx, eTxy, eTxz, eTyy, eTyz, eTzz};
 
   // Output grid functions
   CCTK_REAL *gf_dtW = W_rhs;
-  const array<CCTK_REAL *, 6> gf_dtgamt{gammatxx_rhs, gammatxy_rhs,
+  const std::array<CCTK_REAL *, 6> gf_dtgamt{gammatxx_rhs, gammatxy_rhs,
                                         gammatxz_rhs, gammatyy_rhs,
                                         gammatyz_rhs, gammatzz_rhs};
   CCTK_REAL *gf_dtexKh = Kh_rhs;
-  const array<CCTK_REAL *, 6> gf_dtexAt{Atxx_rhs, Atxy_rhs, Atxz_rhs,
+  const std::array<CCTK_REAL *, 6> gf_dtexAt{Atxx_rhs, Atxy_rhs, Atxz_rhs,
                                         Atyy_rhs, Atyz_rhs, Atzz_rhs};
-  const array<CCTK_REAL *, 3> gf_dttrGt{Gamtx_rhs, Gamty_rhs, Gamtz_rhs};
+  const std::array<CCTK_REAL *, 3> gf_dttrGt{Gamtx_rhs, Gamty_rhs, Gamtz_rhs};
   CCTK_REAL *gf_dtTheta = Theta_rhs;
   CCTK_REAL *gf_dtalpha = alphaG_rhs;
-  const array<CCTK_REAL *, 3> gf_dtbeta{betaGx_rhs, betaGy_rhs, betaGz_rhs};
+  const std::array<CCTK_REAL *, 3> gf_dtbeta{betaGx_rhs, betaGy_rhs, betaGz_rhs};
 
   // Parameters
   const CCTK_REAL cpi = M_PI;
